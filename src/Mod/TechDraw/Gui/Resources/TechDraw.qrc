@@ -45,7 +45,6 @@
         <file>icons/actions/TechDraw_SectionView.svg</file>
         <file>icons/actions/TechDraw_ShareView.svg</file>
         <file>icons/actions/TechDraw_ShowAll.svg</file>
-        <file>icons/actions/TechDraw_SpreadsheetView.svg</file>
         <file>icons/actions/TechDraw_StackTop.svg</file>
         <file>icons/actions/TechDraw_StackBottom.svg</file>
         <file>icons/actions/TechDraw_StackUp.svg</file>
@@ -162,7 +161,6 @@
         <file>icons/TechDraw_TreePageUnsync.svg</file>
         <file>icons/TechDraw_TreeProjGroup.svg</file>
         <file>icons/TechDraw_TreeSection.svg</file>
-        <file>icons/TechDraw_TreeSpreadsheet.svg</file>
         <file>icons/TechDraw_TreeSymbol.svg</file>
         <file>icons/TechDraw_TreeView.svg</file>
         <file>icons/TechDraw_VerticalDimension.svg</file>

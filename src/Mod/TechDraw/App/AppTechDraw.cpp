@@ -53,7 +53,9 @@
 #include "DrawViewImage.h"
 #include "DrawViewPart.h"
 #include "DrawViewSection.h"
+#ifndef FREECAD_PERSONAL_CAD
 #include "DrawViewSpreadsheet.h"
+#endif
 #include "DrawViewSymbol.h"
 #include "DrawWeldSymbol.h"
 #include "FeatureProjection.h"
@@ -91,7 +93,9 @@ PyMOD_INIT_FUNC(TechDraw)
     TechDraw::DrawViewPart        ::init();
     TechDraw::DrawViewAnnotation  ::init();
     TechDraw::DrawViewSymbol      ::init();
+#ifndef FREECAD_PERSONAL_CAD
     TechDraw::DrawViewSpreadsheet ::init();
+#endif
 
     TechDraw::DrawViewSection     ::init();
     TechDraw::DrawComplexSection     ::init();
@@ -148,7 +152,9 @@ PyMOD_INIT_FUNC(TechDraw)
     TechDraw::DrawSVGTemplatePython::init();
     TechDraw::DrawViewSymbolPython::init();
     TechDraw::DrawViewDraftPython ::init();
+#ifndef FREECAD_PERSONAL_CAD
     TechDraw::DrawViewSpreadsheetPython::init();
+#endif
     TechDraw::DrawLeaderLinePython::init();
     TechDraw::DrawRichAnnoPython  ::init();
     TechDraw::DrawTilePython      ::init();

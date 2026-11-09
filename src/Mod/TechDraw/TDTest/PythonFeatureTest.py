@@ -22,7 +22,6 @@ class PythonFeatureTest(unittest.TestCase):
         "TechDraw::DrawSVGTemplatePython": "DrawSVGTemplate",
         "TechDraw::DrawViewSymbolPython": "DrawViewSymbol",
         "TechDraw::DrawViewDraftPython": "DrawViewSymbol",
-        "TechDraw::DrawViewSpreadsheetPython": "DrawViewSymbol",
         "TechDraw::DrawLeaderLinePython": "DrawLeaderLine",
         "TechDraw::DrawRichAnnoPython": "DrawRichAnno",
         "TechDraw::DrawTilePython": "DrawTile",
@@ -34,6 +33,9 @@ class PythonFeatureTest(unittest.TestCase):
         "TechDraw::DrawHatchPython": "DrawHatch",
         "TechDraw::DrawGeomHatchPython": "DrawGeomHatch",
     }
+
+    if FreeCAD.ConfigGet("ExeName") != "PersonalCAD":
+        PYTHON_FEATURES["TechDraw::DrawViewSpreadsheetPython"] = "DrawViewSymbol"
 
     def setUp(self):
         FreeCAD.newDocument("TDPython")

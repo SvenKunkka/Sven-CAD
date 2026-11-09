@@ -1,0 +1,6 @@
+<RCC>
+    <qresource prefix="/">
+        <file>icons/actions/TechDraw_SpreadsheetView.svg</file>
+        <file>icons/TechDraw_TreeSpreadsheet.svg</file>
+    </qresource>
+</RCC>

@@ -37,7 +37,9 @@
 #include <Mod/TechDraw/App/DrawPage.h>
 #include <Mod/TechDraw/App/DrawView.h>
 #include <Mod/TechDraw/App/DrawViewPart.h>
+#ifndef FREECAD_PERSONAL_CAD
 #include <Mod/TechDraw/App/DrawViewSpreadsheet.h>
+#endif
 #include <Mod/TechDraw/App/DrawUtil.h>
 #include <Mod/TechDraw/App/Preferences.h>
 

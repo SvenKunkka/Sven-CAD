@@ -3,9 +3,12 @@
 set(TechDrawLIBS
     Measure
     Part
-    Spreadsheet
     PartDesign
 )
+
+if(NOT FREECAD_PERSONAL_CAD)
+    list(APPEND TechDrawLIBS Spreadsheet)
+endif()
 
 if (BUILD_IMPORT)
     list(APPEND TechDrawLIBS Import)
@@ -58,8 +61,6 @@ SET(Draw_SRCS
     DrawViewAnnotation.h
     DrawViewSymbol.cpp
     DrawViewSymbol.h
-    DrawViewSpreadsheet.cpp
-    DrawViewSpreadsheet.h
     DrawViewClip.cpp
     DrawViewClip.h
     DrawProjGroup.cpp
@@ -163,6 +164,10 @@ SET(TechDraw_SRCS
     LineFormat.cpp
     LineFormat.h
 )
+
+if(NOT FREECAD_PERSONAL_CAD)
+    list(APPEND Draw_SRCS DrawViewSpreadsheet.cpp DrawViewSpreadsheet.h)
+endif()
 
 SET(Geometry_SRCS
     Geometry.cpp

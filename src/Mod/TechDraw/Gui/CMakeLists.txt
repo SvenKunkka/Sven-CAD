@@ -26,9 +26,12 @@ set (TechDraw_TR_QRC ${CMAKE_CURRENT_BINARY_DIR}/Resources/TechDraw_translation.
 qt_find_and_add_translation(QM_SRCS "Resources/translations/*_*.ts"
     ${CMAKE_CURRENT_BINARY_DIR}/Resources/translations)
 qt_create_resource_file(${TechDraw_TR_QRC} ${QM_SRCS})
+set(TechDrawGui_RESOURCES Resources/TechDraw.qrc ${TechDraw_TR_QRC})
+if(NOT FREECAD_PERSONAL_CAD)
+    list(APPEND TechDrawGui_RESOURCES Resources/TechDrawSpreadsheet.qrc)
+endif()
 qt_add_resources(TechDrawGui_SRCS
-    Resources/TechDraw.qrc
-    ${TechDraw_TR_QRC}
+    ${TechDrawGui_RESOURCES}
     OPTIONS ${FREECAD_RCC_OPTIONS}
 )
 
@@ -61,7 +64,6 @@ set(TechDrawGui_UIC_SRCS
     TaskRestoreLines.ui
     TaskRichAnno.ui
     TaskSectionView.ui
-    TaskSpreadsheetView.ui
     TaskWeldingSymbol.ui
     TaskSurfaceFinishSymbols.ui
     SymbolChooser.ui
@@ -138,9 +140,6 @@ SET(TechDrawGui_SRCS
     TaskSectionView.ui
     TaskSectionView.cpp
     TaskSectionView.h
-    TaskSpreadsheetView.ui
-    TaskSpreadsheetView.cpp
-    TaskSpreadsheetView.h
     TaskBalloon.ui
     TaskBalloon.cpp
     TaskBalloon.h
@@ -292,8 +291,6 @@ SET(TechDrawGuiView_SRCS
     QGIViewAnnotation.h
     QGIViewSymbol.cpp
     QGIViewSymbol.h
-    QGIViewSpreadsheet.cpp
-    QGIViewSpreadsheet.h
     QGIViewImage.cpp
     QGIViewImage.h
     QGIViewClip.cpp
@@ -394,8 +391,6 @@ SET(TechDrawGuiViewProvider_SRCS
     ViewProviderAnnotation.h
     ViewProviderSymbol.cpp
     ViewProviderSymbol.h
-    ViewProviderSpreadsheet.cpp
-    ViewProviderSpreadsheet.h
     ViewProviderViewClip.cpp
     ViewProviderViewClip.h
     ViewProviderGeomHatch.cpp
@@ -420,7 +415,6 @@ SET(TechDrawGuiTaskDlgs_SRCS
     TaskProjGroup.ui
     TaskLinkDim.ui
     TaskSectionView.ui
-    TaskSpreadsheetView.ui
     TaskGeomHatch.ui
     TaskHatch.ui
     TaskLeaderLine.ui
@@ -445,6 +439,19 @@ SET(TechDrawGuiTaskDlgs_SRCS
     TaskComplexSection.ui
     TaskDimRepair.ui
 )
+
+if(NOT FREECAD_PERSONAL_CAD)
+    list(APPEND TechDrawGui_UIC_SRCS TaskSpreadsheetView.ui)
+    list(APPEND TechDrawGui_SRCS
+        Resources/TechDrawSpreadsheet.qrc
+        TaskSpreadsheetView.ui
+        TaskSpreadsheetView.cpp
+        TaskSpreadsheetView.h
+    )
+    list(APPEND TechDrawGuiView_SRCS QGIViewSpreadsheet.cpp QGIViewSpreadsheet.h)
+    list(APPEND TechDrawGuiViewProvider_SRCS ViewProviderSpreadsheet.cpp ViewProviderSpreadsheet.h)
+    list(APPEND TechDrawGuiTaskDlgs_SRCS TaskSpreadsheetView.ui)
+endif()
 
 SOURCE_GROUP("MRTE" FILES ${MRTE_SRCS})
 SOURCE_GROUP("Mod" FILES ${TechDrawGui_SRCS})

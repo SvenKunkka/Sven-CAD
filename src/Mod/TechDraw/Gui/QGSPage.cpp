@@ -58,7 +58,9 @@
 #include <Mod/TechDraw/App/DrawViewImage.h>
 #include <Mod/TechDraw/App/DrawViewPart.h>
 #include <Mod/TechDraw/App/DrawViewSection.h>
+#ifndef FREECAD_PERSONAL_CAD
 #include <Mod/TechDraw/App/DrawViewSpreadsheet.h>
+#endif
 #include <Mod/TechDraw/App/DrawViewSymbol.h>
 #include <Mod/TechDraw/App/DrawWeldSymbol.h>
 #include <Mod/TechDraw/App/Preferences.h>
@@ -81,7 +83,9 @@
 #include "QGIViewImage.h"
 #include "QGIViewPart.h"
 #include "QGIViewSection.h"
+#ifndef FREECAD_PERSONAL_CAD
 #include "QGIViewSpreadsheet.h"
+#endif
 #include "QGIViewSymbol.h"
 #include "QGIWeldSymbol.h"
 #include "QGSPage.h"
@@ -391,10 +395,12 @@ bool QGSPage::attachView(App::DocumentObject* obj)
     else if (auto o = freecad_cast<TechDraw::DrawViewAnnotation*>(obj)) {
         qview = addAnnotation(o);
     }
+#ifndef FREECAD_PERSONAL_CAD
     else if (auto o = freecad_cast<TechDraw::DrawViewSpreadsheet*>(obj)) {
         // has to be before DrawViewSymbol since it's a subclass of it.
         qview = addDrawViewSpreadsheet(o);
     }
+#endif
     else if (auto o = freecad_cast<TechDraw::DrawViewSymbol*>(obj)) {
         qview = addDrawViewSymbol(o);
     }
@@ -545,6 +551,7 @@ QGIView* QGSPage::addDrawViewClip(TechDraw::DrawViewClip* view)
     return qview;
 }
 
+#ifndef FREECAD_PERSONAL_CAD
 QGIView* QGSPage::addDrawViewSpreadsheet(TechDraw::DrawViewSpreadsheet* sheetFeat)
 {
     auto qview(new QGIViewSpreadsheet);
@@ -553,6 +560,7 @@ QGIView* QGSPage::addDrawViewSpreadsheet(TechDraw::DrawViewSpreadsheet* sheetFea
 
     return qview;
 }
+#endif
 
 QGIView* QGSPage::addDrawViewImage(TechDraw::DrawViewImage* imageFeat)
 {

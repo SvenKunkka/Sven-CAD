@@ -51,7 +51,9 @@ class DrawViewAnnotation;
 class DrawViewSymbol;
 class DrawViewClip;
 class DrawViewCollection;
+#ifndef FREECAD_PERSONAL_CAD
 class DrawViewSpreadsheet;
+#endif
 class DrawViewImage;
 class DrawLeaderLine;
 class DrawViewBalloon;
@@ -90,7 +92,9 @@ public:
     QGIView* addAnnotation(TechDraw::DrawViewAnnotation* annoFeat);
     QGIView* addDrawViewSymbol(TechDraw::DrawViewSymbol* symbolFeat);
     QGIView* addDrawViewClip(TechDraw::DrawViewClip* clipFeat);
+#ifndef FREECAD_PERSONAL_CAD
     QGIView* addDrawViewSpreadsheet(TechDraw::DrawViewSpreadsheet* sheetFeat);
+#endif
     QGIView* addDrawViewImage(TechDraw::DrawViewImage* imageFeat);
     QGIView* addViewLeader(TechDraw::DrawLeaderLine* leaderFeat);
     QGIView* addRichAnno(TechDraw::DrawRichAnno* richFeat);

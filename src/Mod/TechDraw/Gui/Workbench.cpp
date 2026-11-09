@@ -236,7 +236,9 @@ Gui::MenuItem* Workbench::setupMenuBar() const
     *other << "TechDraw_ActiveView";
     *other << "TechDraw_DraftView";
     *other << "TechDraw_ArchView";
+#ifndef FREECAD_PERSONAL_CAD
     *other << "TechDraw_SpreadsheetView";
+#endif
 
     // hatching
     Gui::MenuItem* hatch = new Gui::MenuItem;
@@ -306,7 +308,9 @@ Gui::ToolBarItem* Workbench::setupToolBars() const
     *views << "TechDraw_SectionGroup";
     *views << "TechDraw_DetailView";
     *views << "TechDraw_DraftView";
+#ifndef FREECAD_PERSONAL_CAD
     *views << "TechDraw_SpreadsheetView";
+#endif
     *views << "TechDraw_ClipGroup";
 
     Gui::ToolBarItem* stacking = new Gui::ToolBarItem(root);

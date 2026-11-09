@@ -49,7 +49,9 @@
 #include <Gui/ViewProvider.h>
 #include <Gui/WaitCursor.h>
 
+#ifndef FREECAD_PERSONAL_CAD
 #include <Mod/Spreadsheet/App/Sheet.h>
+#endif
 
 #include <Mod/TechDraw/App/DrawComplexSection.h>
 #include <Mod/TechDraw/App/DrawPage.h>
@@ -61,7 +63,9 @@
 #include <Mod/TechDraw/App/DrawViewDetail.h>
 #include <Mod/TechDraw/App/DrawViewDraft.h>
 #include <Mod/TechDraw/App/DrawViewPart.h>
+#ifndef FREECAD_PERSONAL_CAD
 #include <Mod/TechDraw/App/DrawViewSpreadsheet.h>
+#endif
 #include <Mod/TechDraw/App/DrawViewSymbol.h>
 #include <Mod/TechDraw/App/Preferences.h>
 #include <Mod/TechDraw/App/DrawBrokenView.h>
@@ -78,7 +82,9 @@
 #include "TaskProjGroup.h"
 #include "TaskProjection.h"
 #include "TaskSectionView.h"
+#ifndef FREECAD_PERSONAL_CAD
 #include "TaskSpreadsheetView.h"
+#endif
 #include "ViewProviderPage.h"
 #include "ViewProviderDrawingView.h"
 #include "CommandHelpers.h"
@@ -341,6 +347,7 @@ void CmdTechDrawView::activated(int iMsg)
             continue;
         }
 
+#ifndef FREECAD_PERSONAL_CAD
         if (obj->isDerivedFrom<Spreadsheet::Sheet>()) {
             std::string SpreadName = obj->getNameInDocument();
 
@@ -361,7 +368,8 @@ void CmdTechDrawView::activated(int iMsg)
             viewCreated = true;
             continue;
         }
-        else if (DrawGuiUtil::isArchSection(obj)) {
+#endif
+        if (DrawGuiUtil::isArchSection(obj)) {
             std::string FeatName = getUniqueObjectName("BIM view");
             std::string SourceName = obj->getNameInDocument();
             openCommand(QT_TRANSLATE_NOOP("Command", "Create BIM view"));
@@ -1738,6 +1746,7 @@ void CmdTechDrawArchView::activated(int iMsg)
 
 bool CmdTechDrawArchView::isActive() { return DrawGuiUtil::needPage(this); }
 
+#ifndef FREECAD_PERSONAL_CAD
 //===========================================================================
 // TechDraw_SpreadsheetView
 //===========================================================================
@@ -1831,6 +1840,7 @@ bool CmdTechDrawSpreadsheetView::isActive()
 {
     return DrawGuiUtil::needPage(this);
 }
+#endif
 
 
 //===========================================================================
@@ -2052,7 +2062,9 @@ void CreateTechDrawCommands()
     rcCmdMgr.addCommand(new CmdTechDrawExportGroup());
     rcCmdMgr.addCommand(new CmdTechDrawDraftView());
     rcCmdMgr.addCommand(new CmdTechDrawArchView());
+#ifndef FREECAD_PERSONAL_CAD
     rcCmdMgr.addCommand(new CmdTechDrawSpreadsheetView());
+#endif
     rcCmdMgr.addCommand(new CmdTechDrawBalloon());
     rcCmdMgr.addCommand(new CmdTechDrawProjectShape());
     rcCmdMgr.addCommand(new CmdTechDrawBrokenView());

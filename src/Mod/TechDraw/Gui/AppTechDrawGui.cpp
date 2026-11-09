@@ -54,7 +54,9 @@
 #include "ViewProviderProjGroup.h"
 #include "ViewProviderProjGroupItem.h"
 #include "ViewProviderRichAnno.h"
+#ifndef FREECAD_PERSONAL_CAD
 #include "ViewProviderSpreadsheet.h"
+#endif
 #include "ViewProviderSymbol.h"
 #include "ViewProviderTemplate.h"
 #include "ViewProviderTemplateExtension.h"
@@ -80,6 +82,9 @@ void loadTechDrawResource()
 {
     // add resources and reloads the translators
     Q_INIT_RESOURCE(TechDraw);
+#ifndef FREECAD_PERSONAL_CAD
+    Q_INIT_RESOURCE(TechDrawSpreadsheet);
+#endif
     Q_INIT_RESOURCE(TechDraw_translation);
     Gui::Translator::instance()->refresh();
 
@@ -154,7 +159,9 @@ PyMOD_INIT_FUNC(TechDrawGui)
     TechDrawGui::ViewProviderArch::init();
     TechDrawGui::ViewProviderHatch::init();
     TechDrawGui::ViewProviderGeomHatch::init();
+#ifndef FREECAD_PERSONAL_CAD
     TechDrawGui::ViewProviderSpreadsheet::init();
+#endif
     TechDrawGui::ViewProviderImage::init();
     TechDrawGui::ViewProviderLeader::init();
     TechDrawGui::ViewProviderRichAnno::init();

@@ -11,3 +11,5 @@ set(CMAKE_CXX_STANDARD 17)
 
 add_executable(FreeCAD FreeCAD.cpp)
 target_link_libraries(FreeCAD)
+
+add_executable(PersonalCAD EXCLUDE_FROM_ALL PersonalCAD.cpp)

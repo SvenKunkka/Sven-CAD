@@ -1,0 +1,45 @@
+--- a/src/widgets/accessible/itemviews.cpp
++++ b/src/widgets/accessible/itemviews.cpp
+@@ -947,6 +947,32 @@
+     return QString(); // no headers for rows in trees
+ }
+ 
++void QAccessibleTree::modelChange(QAccessibleTableModelChangeEvent *event)
++{
++    if (event->modelChangeType() != QAccessibleTableModelChangeEvent::ModelReset) {
++        QAccessibleTable::modelChange(event);
++        return;
++    }
++
++    // QTreeView reports ModelReset after laying out the view, even though the
++    // underlying model and its persistent indexes may still be valid.
++    ChildCache retained;
++    QList<QAccessible::Id> retired;
++    for (QAccessible::Id id : std::as_const(childToId)) {
++        auto *iface = QAccessible::accessibleInterface(id);
++        const int childIndex = iface && iface->isValid() ? indexOfChild(iface) : -1;
++        if (childIndex >= 0 && !retained.contains(childIndex)
++            && (iface->role() != QAccessible::ColumnHeader || childIndex < columnCount())) {
++            retained.insert(childIndex, id);
++        } else {
++            retired.append(id);
++        }
++    }
++    childToId = std::move(retained);
++    for (QAccessible::Id id : retired)
++        QAccessible::deleteAccessibleInterface(id);
++}
++
+ bool QAccessibleTree::isRowSelected(int row) const
+ {
+     if (!view()->selectionModel())
+--- a/src/widgets/accessible/itemviews_p.h
++++ b/src/widgets/accessible/itemviews_p.h
+@@ -138,6 +138,7 @@
+     QString rowDescription(int row) const override;
+     bool isRowSelected(int row) const override;
+     bool selectRow(int row) override;
++    void modelChange(QAccessibleTableModelChangeEvent *event) override;
+ 
+ private:
+     QModelIndex indexFromLogical(int row, int column = 0) const;

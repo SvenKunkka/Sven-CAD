@@ -1,0 +1,97 @@
+"""Test real macOS viewports and an oversized framebuffer request on synthetic documents."""
+
+import json
+import os
+from pathlib import Path
+import sys
+import traceback
+
+import FreeCAD as App
+import FreeCADGui as Gui
+from PySide import QtCore, QtGui, QtWidgets
+
+sys.path.insert(0, os.environ["FREECAD_PERSONAL_QA_CODE"])
+from runtime_info import cocoa_plugin, qt_widgets
+
+
+def run():
+    output = Path(os.environ["FREECAD_PERSONAL_QA_OUTPUT"])
+    report = {"status": "failed", "cocoa_plugin": cocoa_plugin(), "qt_widgets": qt_widgets()}
+    documents = []
+    try:
+        App.ParamGet("User parameter:BaseApp/Preferences/View").SetString("SavePicture", "FramebufferObject")
+        for index in (1, 2):
+            doc = App.newDocument(f"ViewportFixture{index}")
+            documents.append(doc.Name)
+            box = doc.addObject("Part::Box", "Box")
+            box.Length = 10 * index
+            box.Width = 8
+            box.Height = 6
+            doc.recompute()
+            Gui.activeDocument().activeView().viewAxonometric()
+            Gui.activeDocument().activeView().fitAll()
+            QtWidgets.QApplication.processEvents()
+
+        for index in range(40):
+            Gui.setActiveDocument(documents[index % 2])
+            view = Gui.activeDocument().activeView()
+            view.redraw()
+            QtWidgets.QApplication.processEvents()
+        report["alternating_redraws"] = 40
+
+        selected = App.ActiveDocument
+        expected_volume = round(selected.Box.Shape.Volume)
+        Gui.Selection.clearSelection()
+        Gui.Selection.addSelection(selected.Name, "Box")
+
+        def capture_volume_dialog():
+            dialog = QtWidgets.QApplication.activeModalWidget()
+            if isinstance(dialog, QtWidgets.QMessageBox):
+                report["volume_label"] = dialog.text()
+                dialog.accept()
+
+        QtCore.QTimer.singleShot(100, capture_volume_dialog)
+        Gui.runCommand("Std_MeasureVolume", 0)
+        assert str(expected_volume) in report.get("volume_label", ""), report
+        assert "mm³" in report["volume_label"], report["volume_label"]
+        Gui.Selection.clearSelection()
+
+        view = Gui.activeDocument().activeView()
+        valid = output / "normal-frame.png"
+        view.saveImage(str(valid), 320, 240, "Current", "", 0)
+        image = QtGui.QImage(str(valid))
+        assert not image.isNull() and image.width() == 320 and image.height() == 240
+        report["normal_image"] = [image.width(), image.height()]
+
+        bad = output / "oversized-frame.png"
+        try:
+            view.saveImage(str(bad), 1 << 20, 2, "Current", "", 0)
+        except (ValueError, RuntimeError) as error:
+            report["oversized_frame_error"] = str(error)
+        assert not bad.exists(), "Oversized framebuffer generated output"
+        assert report.get("oversized_frame_error"), "Expected a recoverable error"
+
+        for index, name in enumerate(documents, start=1):
+            doc = App.getDocument(name)
+            doc.Box.Length = 10 * index + 1
+            doc.recompute()
+            path = output / (name + ".FCStd")
+            doc.saveAs(str(path))
+            App.closeDocument(name)
+            reopened = App.openDocument(str(path))
+            assert abs(reopened.Box.Length.Value - (10 * index + 1)) < 1e-6
+            assert reopened.Box.Shape.isValid()
+            App.closeDocument(reopened.Name)
+
+        report["saved_and_reopened"] = len(documents)
+        report["status"] = "passed"
+    except Exception:
+        report["error"] = traceback.format_exc()
+    finally:
+        for name in list(App.listDocuments()):
+            App.closeDocument(name)
+        (output / "report.json").write_text(json.dumps(report, indent=2) + "\n")
+        Gui.runCommand("Std_Quit", 0)
+
+
+QtCore.QTimer.singleShot(200, run)

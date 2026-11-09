@@ -74,3 +74,6 @@ tsupdate_stdout.log
 # pixi environments
 *.egg-info
 .pixi
+
+# PersonalCAD macOS build workspace
+/.personal-cad-build/

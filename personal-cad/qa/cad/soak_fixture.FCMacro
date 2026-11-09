@@ -1,0 +1,81 @@
+"""Keep one application process running real CAD workflows for a measured duration."""
+
+import json
+import os
+from pathlib import Path
+import runpy
+import shutil
+import sys
+from time import monotonic
+import traceback
+
+import FreeCAD as App
+import FreeCADGui as Gui
+from PySide import QtCore
+
+code = Path(os.environ["FREECAD_PERSONAL_QA_CODE"])
+sys.path.insert(0, str(code))
+from runtime_info import cocoa_plugin, qt_widgets
+
+fixtures = runpy.run_path(str(code / "run_fixtures.FCMacro"), run_name="soak_fixtures")
+output = Path(os.environ["FREECAD_PERSONAL_QA_OUTPUT"])
+duration = int(os.environ["FREECAD_PERSONAL_QA_DURATION"])
+start = monotonic()
+rounds = 0
+report = {
+    "status": "failed",
+    "pid": os.getpid(),
+    "cocoa_plugin": cocoa_plugin(),
+    "qt_widgets": qt_widgets(),
+    "planned_seconds": duration,
+    "freecad_version": list(App.Version()),
+}
+
+
+def finish():
+    report["elapsed_seconds"] = round(monotonic() - start, 3)
+    report["rounds"] = rounds
+    (output / "report.json").write_text(json.dumps(report, indent=2) + "\n")
+    for name in reversed(list(App.listDocuments())):
+        App.closeDocument(name)
+    QtCore.QTimer.singleShot(500, lambda: Gui.runCommand("Std_Quit", 0))
+
+
+def run_round():
+    global rounds
+    if rounds and monotonic() - start >= duration:
+        report["status"] = "passed"
+        finish()
+        return
+
+    work = output / f"round-{rounds + 1:04d}"
+    work.mkdir()
+    results = {}
+    try:
+        fixtures["generate"](work, False, results)
+        metrics = {
+            p.name: fixtures["file_metrics"](p) for p in sorted(work.iterdir())
+            if p.is_file() and p.suffix.lower() in {".fcstd", ".step", ".pdf", ".svg", ".dxf"}
+        }
+        record = {
+            "round": rounds + 1,
+            "elapsed_seconds": round(monotonic() - start, 3),
+            "fixtures": results,
+            "artifacts": metrics,
+        }
+        (work / "verified.json").write_text(json.dumps(record, indent=2) + "\n")
+        with (output / "rounds.jsonl").open("a") as stream:
+            stream.write(json.dumps(record) + "\n")
+        if rounds:
+            shutil.rmtree(output / f"round-{rounds:04d}")
+        rounds += 1
+    except Exception:
+        report["error"] = traceback.format_exc()
+        finish()
+        return
+
+    # Re-enter the real event loop between rounds. Each pass still does the full workflow.
+    QtCore.QTimer.singleShot(15000, run_round)
+
+
+QtCore.QTimer.singleShot(200, run_round)

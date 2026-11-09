@@ -267,6 +267,12 @@ void Writer::addError(const std::string& msg)
 
 void Writer::checkErrNo()
 {
+#ifdef FREECAD_PERSONAL_CAD
+    // A successful write can leave errno set by an unrelated operation.
+    if (!Stream()) {
+        addError(errno ? strerror(errno) : "Output stream write failed");
+    }
+#else
     switch (errno) {
         case ENOSPC:  // No space left
         case EROFS:   // Read only
@@ -274,6 +280,7 @@ void Writer::checkErrNo()
         case EACCES:  // Access denied
             addError(strerror(errno));
     }
+#endif
 }
 
 bool Writer::hasErrors() const

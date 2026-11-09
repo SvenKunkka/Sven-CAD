@@ -39,7 +39,9 @@
 #include <Gui/WaitCursor.h>
 
 #include "DlgPartCylinderImp.h"
+#ifndef FREECAD_PERSONAL_CAD
 #include "ShapeFromMesh.h"
+#endif
 #include <Mod/Part/App/PartFeature.h>
 
 

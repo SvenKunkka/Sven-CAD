@@ -62,7 +62,6 @@ set(PartGui_UIC_SRCS
     PatternPointParametersWidget.ui
     PatternPathParametersWidget.ui
     SectionCutting.ui
-    ShapeFromMesh.ui
     TaskFaceAppearances.ui
     TaskLinkArrayParameters.ui
     TaskShapeBuilder.ui
@@ -257,8 +256,6 @@ SET(PartGui_SRCS
     SectionCutting.cpp
     SectionCutting.h
     SectionCutting.ui
-    ShapeFromMesh.cpp
-    ShapeFromMesh.h
     TaskFaceAppearances.cpp
     TaskFaceAppearances.h
     TaskFaceAppearances.ui
@@ -286,6 +283,11 @@ SET(PartGui_SRCS
     TaskAttacher.h
     TaskAttacher.cpp
 )
+
+if(NOT FREECAD_PERSONAL_CAD)
+    list(APPEND PartGui_UIC_SRCS ShapeFromMesh.ui)
+    list(APPEND PartGui_SRCS ShapeFromMesh.cpp ShapeFromMesh.h)
+endif()
 
 SET(PartGuiIcon_SVG
     Resources/icons/PartWorkbench.svg

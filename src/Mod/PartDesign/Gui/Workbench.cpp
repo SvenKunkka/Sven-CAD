@@ -149,6 +149,7 @@ void Workbench::activated()
 
     WorkflowManager::init();
 
+#ifndef FREECAD_PERSONAL_CAD
     std::vector<Gui::TaskView::TaskWatcher*> Watcher;
 
     const char* Vertex[]
@@ -377,6 +378,7 @@ void Workbench::activated()
             ->GetBool("SwitchToTask", true)) {
         Gui::Control().showTaskView();
     }
+#endif
 }
 
 void Workbench::deactivated()

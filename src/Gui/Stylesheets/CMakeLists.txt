@@ -4,6 +4,10 @@ SET(Stylesheets_Files
     "defaults.qss"
 )
 
+if(FREECAD_PERSONAL_CAD)
+    list(APPEND Stylesheets_Files "PersonalCADDesign.qss")
+endif()
+
 SET(Parameters_Files
     "parameters/FreeCAD Dark.yaml"
     "parameters/FreeCAD Light.yaml"

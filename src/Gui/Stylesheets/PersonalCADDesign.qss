@@ -1,0 +1,118 @@
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
+
+#PersonalCadDesignToolbar,
+#PersonalCadDesignHost,
+#PersonalCadCommandGroups,
+#PersonalCadCommandViewport,
+#PersonalCadCommandPage,
+#PersonalCadDesignTabs {
+    background: #f5f5f5;
+}
+
+#PersonalCadDesignToolbar {
+    border: 0;
+    border-bottom: 1px solid #cfd3d8;
+    padding: 0;
+    spacing: 0;
+}
+
+#PersonalCadDesignTabs::tab {
+    color: #363d45;
+    background: transparent;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    min-height: 19px;
+    padding: 2px 12px;
+}
+
+#PersonalCadDesignTabs::tab:selected {
+    color: #192733;
+    background: transparent;
+    border-bottom-color: #176da6;
+    font-weight: 600;
+}
+
+#PersonalCadDesignTabs::tab:hover:!selected {
+    background: #e7edf2;
+}
+
+#PersonalCadDesignTabs::tab:disabled {
+    color: #626d77;
+}
+
+#PersonalCadWorkspaceSelector {
+    color: #232c34;
+    background: #fafafa;
+    border: 1px solid #c7cdd3;
+    border-radius: 4px;
+    min-width: 55px;
+    min-height: 46px;
+    padding: 0 17px 0 11px;
+    font-weight: 600;
+}
+
+QToolButton[personalCadRole="command"],
+QToolButton[personalCadRole="group"] {
+    color: #232c34;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 3px;
+}
+
+QToolButton[personalCadRole="command"] {
+    min-width: 34px;
+    padding: 2px 4px;
+}
+
+QToolButton[personalCadRole="group"] {
+    min-height: 16px;
+    padding: 0 13px 0 4px;
+}
+
+#PersonalCadWorkspaceSelector:hover,
+QToolButton[personalCadRole="command"]:hover,
+QToolButton[personalCadRole="group"]:hover {
+    background: #e7edf2;
+    border-color: #c8d3de;
+}
+
+#PersonalCadWorkspaceSelector:pressed,
+QToolButton[personalCadRole="command"]:pressed,
+QToolButton[personalCadRole="command"]:checked,
+QToolButton[personalCadRole="group"]:pressed {
+    background: #dbe8f1;
+    border-color: #aabed0;
+}
+
+#PersonalCadWorkspaceSelector:focus,
+QToolButton[personalCadRole="command"]:focus,
+QToolButton[personalCadRole="group"]:focus {
+    border-color: #176da6;
+}
+
+QToolButton[personalCadRole="command"]:disabled,
+QToolButton[personalCadRole="group"]:disabled {
+    color: #626d77;
+    background: transparent;
+    border-color: transparent;
+}
+
+#PersonalCadGroupDivider {
+    background: #d2d6da;
+    border: 0;
+}
+
+QMenu {
+    color: #232c34;
+    background: #ffffff;
+    border: 1px solid #c7cdd3;
+}
+
+QMenu::item:selected {
+    color: #192733;
+    background: #e7edf2;
+}
+
+QMenu::item:disabled {
+    color: #626d77;
+}

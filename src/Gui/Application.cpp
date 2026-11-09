@@ -40,6 +40,7 @@
 #include <QScopeGuard>
 #include <QStatusBar>
 #include <QStyle>
+#include <QStyleHints>
 #include <QSurfaceFormat>
 #include <QTextStream>
 #include <QTimer>
@@ -2663,6 +2664,11 @@ void Application::runApplication()
 
     int argc = App::Application::GetARGC();
     GUISingleApplication mainApp(argc, App::Application::GetARGV());
+
+#if defined(FREECAD_PERSONAL_CAD) && defined(Q_OS_MACOS) && QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
+    // Keep the native title bar and menus consistent with the light design workspace.
+    mainApp.styleHints()->setColorScheme(Qt::ColorScheme::Light);
+#endif
 
 #if (COIN_MAJOR_VERSION * 100 + COIN_MINOR_VERSION * 10 + COIN_MICRO_VERSION < 406) \
     && (defined(FC_OS_LINUX) || defined(FC_OS_BSD))

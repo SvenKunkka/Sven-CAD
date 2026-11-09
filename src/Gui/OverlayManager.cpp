@@ -1956,6 +1956,12 @@ bool OverlayManager::eventFilter(QObject* o, QEvent* ev)
             if (qobject_cast<QAbstractButton*>(o)) {
                 return false;
             }
+#ifdef FREECAD_PERSONAL_CAD
+            // Keep clicks targeted at the ribbon out of canvas overlay hit testing.
+            if (o->objectName() == QStringLiteral("PersonalCadDesignTabs")) {
+                return false;
+            }
+#endif
             if (ev->type() != QEvent::Wheel) {
                 if (qobject_cast<OverlayTitleBar*>(o)) {
                     return false;

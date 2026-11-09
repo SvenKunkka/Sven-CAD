@@ -395,17 +395,20 @@ PyObject* View3DInventorPy::method_varargs_ext_handler(PyObject* _self_and_name_
         return pycxx_handler(_self_and_name_tuple, _args);
     }
     catch (const Base::Exception& e) {
-        throw Py::RuntimeError(e.what());
+        PyErr_SetString(PyExc_RuntimeError, e.what());
     }
     catch (const std::exception& e) {
-        throw Py::RuntimeError(e.what());
+        PyErr_SetString(PyExc_RuntimeError, e.what());
     }
     catch (const Py::Exception&) {
-        throw;
+        if (!PyErr_Occurred()) {
+            PyErr_SetString(PyExc_RuntimeError, "Python exception from 3D view");
+        }
     }
     catch (...) {
-        throw Py::RuntimeError("Unknown C++ exception");
+        PyErr_SetString(PyExc_RuntimeError, "Unknown C++ exception");
     }
+    return nullptr;
 }
 
 // Since with PyCXX it's not possible to make a sub-class of MDIViewPy

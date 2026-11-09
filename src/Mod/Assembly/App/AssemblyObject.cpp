@@ -74,7 +74,9 @@
 #include <OndselSolver/ASMTSphSphJoint.h>
 #include <OndselSolver/ASMTTime.h>
 #include <OndselSolver/ASMTConstantGravity.h>
+#include <OndselSolver/Constraint.h>
 #include <OndselSolver/ExternalSystem.h>
+#include <OndselSolver/Joint.h>
 #include <OndselSolver/enum.h>
 
 #ifndef FREECAD_PERSONAL_CAD

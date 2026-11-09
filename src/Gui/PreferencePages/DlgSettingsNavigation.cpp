@@ -32,6 +32,7 @@
 #include <Base/Tools.h>
 #include <Gui/MainWindow.h>
 #include <Gui/View3DSettings.h>
+#include <Gui/Navigation/NavigationDefaults.h>
 #include <Gui/Navigation/NavigationStyle.h>
 #include <Gui/View3DInventor.h>
 #include <Gui/View3DInventorViewer.h>
@@ -176,10 +177,7 @@ void DlgSettingsNavigation::loadSettings()
     ParameterGrp::handle hGrp = App::GetApplication().GetParameterGroupByPath(
         "User parameter:BaseApp/Preferences/View"
     );
-    std::string model = hGrp->GetASCII(
-        "NavigationStyle",
-        std::string {CADNavigationStyle::getClassTypeId().getName()}.c_str()
-    );
+    std::string model = hGrp->GetASCII("NavigationStyle", defaultNavigationStyleName());
     int index = ui->comboNavigationStyle->findData(QByteArray(model.c_str()));
     if (index > -1) {
         ui->comboNavigationStyle->setCurrentIndex(index);

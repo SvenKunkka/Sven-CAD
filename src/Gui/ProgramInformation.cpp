@@ -33,6 +33,7 @@
 #include <App/ProgramInformation.h>
 
 #include "FileDialog.h"
+#include "Navigation/NavigationDefaults.h"
 
 using namespace Gui;
 
@@ -69,7 +70,7 @@ void ProgramInformation::getNavigationStyleInformation(std::stringstream& str)
         "User parameter:BaseApp/Preferences/View"
     );
 
-    const std::string navStyle = hGrp->GetASCII("NavigationStyle", "Gui::CADNavigationStyle");
+    const std::string navStyle = hGrp->GetASCII("NavigationStyle", defaultNavigationStyleName());
     constexpr auto orbitStyle = std::to_array<std::string_view>(
         {"Turntable", "Trackball", "Free Turntable", "Trackball Classic", "Rounded Arcball"}
     );

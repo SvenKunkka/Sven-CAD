@@ -81,6 +81,8 @@ def RePopulateIcons():
     a10.setIcon(QtGui.QIcon(":/icons/NavigationSolidWorks_" + StyleSheetType + ".svg"))
     a11.setIcon(QtGui.QIcon(":/icons/NavigationTinkerCAD_" + StyleSheetType + ".svg"))
     a12.setIcon(QtGui.QIcon(":/icons/NavigationTouchpad_" + StyleSheetType + ".svg"))
+    if aFusion is not None:
+        aFusion.setIcon(a2.icon())
 
 
 def retranslateUi():
@@ -661,6 +663,8 @@ def retranslateUi():
     aTrackballClassic.setText(translate("NavigationIndicator", "Trackball Classic"))
     aRoundedArcball.setText(translate("NavigationIndicator", "Rounded Arcball"))
     a0.setText(translate("NavigationIndicator", "Undefined"))
+    if aFusion is not None:
+        aFusion.setText(translate("NavigationIndicator", "Fusion") + "  ")
 
 
 indicator = IndicatorButton(statusBar)
@@ -781,6 +785,15 @@ a12.setText("Touchpad  ")
 a12.setData("Gui::TouchpadNavigationStyle")
 a12.setObjectName("Indicator_NavigationTouchpad")
 
+aFusion = None
+defaultNavigationAction = a2
+fusionStyle = "Gui::FusionNavigationStyle"
+if App.ConfigGet("DefaultNavigationStyle") == fusionStyle:
+    aFusion = QtGui.QAction(gStyle)
+    aFusion.setData(fusionStyle)
+    aFusion.setObjectName("Indicator_NavigationFusion")
+    defaultNavigationAction = aFusion
+
 for action in gStyle.actions():
     action.setCheckable(True)
 
@@ -789,6 +802,8 @@ RePopulateIcons()
 menu.addMenu(menuSettings)
 menu.addSeparator()
 menu.addAction(a0)
+if aFusion is not None:
+    menu.addAction(aFusion)
 menu.addAction(a1)
 menu.addAction(a2)
 menu.addAction(a3)
@@ -843,6 +858,13 @@ def onTooltip():
         a10.setToolTip(t10)
         a11.setToolTip(t11)
         a12.setToolTip(t12)
+        if aFusion is not None:
+            aFusion.setToolTip(
+                translate(
+                    "NavigationIndicator",
+                    "Drag with the middle button to pan. Hold Shift to orbit. Scroll to zoom.",
+                )
+            )
         p.SetBool("Tooltip", 1)
     else:
         for i in gStyle.actions():
@@ -902,7 +924,8 @@ def getCurrentNavigationStyle():
         if view and hasattr(view, "getNavigationType"):
             return view.getNavigationType()
 
-    return pView.GetString("NavigationStyle")
+    current = pView.GetString("NavigationStyle")
+    return current if current and current != "Undefined" else defaultNavigationAction.data()
 
 
 def onMenu(action):
@@ -927,20 +950,15 @@ def setCurrent():
     actions = gStyle.actions()
     current = getCurrentNavigationStyle()
 
-    if current and current != "Undefined":
-        for i in actions:
-            if i.data() == current:
-                s = True
-                i.setChecked(True)
-                setCompact(i)
-                menu.setDefaultAction(i)
-                indicator.setIcon(i.icon())
-                indicator.setToolTip(i.toolTip())
-            else:
-                pass
-    else:
-        s = True
-        pView.SetString("NavigationStyle", a2.data())
+    for i in actions:
+        if i.data() == current:
+            s = True
+            i.setChecked(True)
+            setCompact(i)
+            menu.setDefaultAction(i)
+            indicator.setIcon(i.icon())
+            indicator.setToolTip(i.toolTip())
+            break
 
     if s:
         a0.setVisible(False)

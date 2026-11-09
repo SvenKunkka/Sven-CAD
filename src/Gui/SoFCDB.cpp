@@ -56,6 +56,9 @@
 #include "Inventor/Draggers/SoRotationDragger.h"
 #include "Inventor/Draggers/SoRotationDraggerGeometry.h"
 #include "Inventor/Draggers/Gizmo.h"
+#ifdef FREECAD_PERSONAL_CAD
+#include "Navigation/FusionNavigationStyle.h"
+#endif
 #include "Navigation/GestureNavigationStyle.h"
 #include "Navigation/NavigationStyle.h"
 #include "Navigation/SiemensNXNavigationStyle.h"
@@ -212,6 +215,9 @@ void Gui::SoFCDB::init()
     NavigationStateChart::init();
     BlenderNavigationStyle::init();
     CADNavigationStyle::init();
+#ifdef FREECAD_PERSONAL_CAD
+    FusionNavigationStyle::init();
+#endif
     GestureNavigationStyle::init();
     MayaGestureNavigationStyle::init();
     OpenCascadeNavigationStyle::init();

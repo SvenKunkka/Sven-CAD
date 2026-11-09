@@ -52,6 +52,7 @@
 #include "GuiApplication.h"
 #include "MainWindow.h"
 #ifdef FREECAD_PERSONAL_CAD
+#include "Navigation/NavigationDefaults.h"
 #include "PersonalCadDesignToolbar.h"
 #endif
 #include "Language/Translator.h"
@@ -123,9 +124,18 @@ void StartupProcess::execute()
     setupFileDialog();
 
 #ifdef FREECAD_PERSONAL_CAD
+    App::Application::Config()["DefaultNavigationStyle"] = defaultNavigationStyleName();
     const auto preferences = App::GetApplication().GetParameterGroupByPath(
         "User parameter:BaseApp/Preferences"
     );
+    const auto view = preferences->GetGroup("View");
+    if (!view->GetBool("PersonalCadFusionNavigationInitialized", false)) {
+        if (view->GetASCII("NavigationStyle") == "Gui::CADNavigationStyle") {
+            view->RemoveASCII("NavigationStyle");
+        }
+        view->SetBool("PersonalCadFusionNavigationInitialized", true);
+    }
+
     const auto window = preferences->GetGroup("MainWindow");
     if (!window->GetBool("PersonalCadLightThemeInitialized", false)) {
         const auto theme = window->GetASCII("Theme");
@@ -135,7 +145,6 @@ void StartupProcess::execute()
         if (stockDark && window->GetASCII("ThemeStyleParametersFile").empty()) {
             window->SetASCII("Theme", "FreeCAD Light");
             window->SetASCII("StyleSheet", "FreeCAD.qss");
-            const auto view = preferences->GetGroup("View");
             // Replace the stock dark canvas only. Keep saved custom colors and gradients.
             constexpr unsigned long darkBackground = 1364283903UL;
             constexpr unsigned long lightBackground = 4160223231UL;

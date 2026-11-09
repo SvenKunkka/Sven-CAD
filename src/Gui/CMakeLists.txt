@@ -909,7 +909,11 @@ SET(Navigation_SRCS
     Navigation/NavigationAnimator.h
     Navigation/NavigationAnimation.h
     Navigation/SiemensNXNavigationStyle.h
+    Navigation/NavigationDefaults.h
 )
+if(FREECAD_PERSONAL_CAD)
+    list(APPEND Navigation_SRCS Navigation/FusionNavigationStyle.cpp Navigation/FusionNavigationStyle.h)
+endif()
 SOURCE_GROUP("Navigation" FILES ${Navigation_SRCS})
 
 #quarter sources

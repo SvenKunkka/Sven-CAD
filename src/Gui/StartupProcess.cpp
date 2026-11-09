@@ -51,6 +51,9 @@
 #include "FileDialog.h"
 #include "GuiApplication.h"
 #include "MainWindow.h"
+#ifdef FREECAD_PERSONAL_CAD
+#include "PersonalCadDesignToolbar.h"
+#endif
 #include "Language/Translator.h"
 #include "Dialogs/DlgVersionMigrator.h"
 #include "FreeCADStyle.h"
@@ -503,6 +506,10 @@ void StartupPostProcess::activateWorkbench()
     // 1. it shows a white window for a few seconds which doesn't look nice
     // 2. the layout of the toolbars is completely broken
     guiApp.activateWorkbench(start.c_str());
+
+#ifdef FREECAD_PERSONAL_CAD
+    installPersonalCadDesignToolbar(*mainWindow, guiApp);
+#endif
 
     // show the main window
     if (!Application::hiddenMainWindow()) {

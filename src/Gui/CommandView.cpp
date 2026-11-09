@@ -20,6 +20,7 @@
  *                                                                         *
  ***************************************************************************/
 
+#include <cmath>
 #include <cstddef>
 #include <sstream>
 #include <string>
@@ -42,6 +43,11 @@
 #include <QFontMetrics>
 #include <QImageReader>
 #include <QMessageBox>
+#ifdef FREECAD_PERSONAL_CAD
+#include <QKeyEvent>
+#include <QMouseEvent>
+#include <QPolygonF>
+#endif
 #include <QPainter>
 #include <QPointer>
 #include <QSignalBlocker>
@@ -79,6 +85,9 @@
 #include "Navigation/NavigationStyle.h"
 #include "OverlayParams.h"
 #include "OverlayManager.h"
+#ifdef FREECAD_PERSONAL_CAD
+#include "Quarter/devices/InputDevice.h"
+#endif
 #include "SceneInspector.h"
 #include "Selection.h"
 #include "Selection/BoxSelection.h"
@@ -784,43 +793,57 @@ Gui::Action* StdCmdDrawStyle::createAction()
     a0->setIcon(BitmapFactory().iconFromTheme("DrawStyleAsIs"));
     a0->setChecked(true);
     a0->setObjectName(QStringLiteral("Std_DrawStyleAsIs"));
+#ifndef FREECAD_PERSONAL_CAD
     a0->setShortcut(QKeySequence(QStringLiteral("V,1")));
+#endif
     a0->setWhatsThis(QString::fromLatin1(getWhatsThis()));
     QAction* a1 = pcAction->addAction(QString());
     a1->setCheckable(true);
     a1->setIcon(BitmapFactory().iconFromTheme("DrawStylePoints"));
     a1->setObjectName(QStringLiteral("Std_DrawStylePoints"));
+#ifndef FREECAD_PERSONAL_CAD
     a1->setShortcut(QKeySequence(QStringLiteral("V,2")));
+#endif
     a1->setWhatsThis(QString::fromLatin1(getWhatsThis()));
     QAction* a2 = pcAction->addAction(QString());
     a2->setCheckable(true);
     a2->setIcon(BitmapFactory().iconFromTheme("DrawStyleWireFrame"));
     a2->setObjectName(QStringLiteral("Std_DrawStyleWireframe"));
+#ifndef FREECAD_PERSONAL_CAD
     a2->setShortcut(QKeySequence(QStringLiteral("V,3")));
+#endif
     a2->setWhatsThis(QString::fromLatin1(getWhatsThis()));
     QAction* a3 = pcAction->addAction(QString());
     a3->setCheckable(true);
     a3->setIcon(BitmapFactory().iconFromTheme("DrawStyleHiddenLine"));
     a3->setObjectName(QStringLiteral("Std_DrawStyleHiddenLine"));
+#ifndef FREECAD_PERSONAL_CAD
     a3->setShortcut(QKeySequence(QStringLiteral("V,4")));
+#endif
     a3->setWhatsThis(QString::fromLatin1(getWhatsThis()));
     QAction* a4 = pcAction->addAction(QString());
     a4->setCheckable(true);
     a4->setIcon(BitmapFactory().iconFromTheme("DrawStyleNoShading"));
     a4->setObjectName(QStringLiteral("Std_DrawStyleNoShading"));
+#ifndef FREECAD_PERSONAL_CAD
     a4->setShortcut(QKeySequence(QStringLiteral("V,5")));
+#endif
     a4->setWhatsThis(QString::fromLatin1(getWhatsThis()));
     QAction* a5 = pcAction->addAction(QString());
     a5->setCheckable(true);
     a5->setIcon(BitmapFactory().iconFromTheme("DrawStyleShaded"));
     a5->setObjectName(QStringLiteral("Std_DrawStyleShaded"));
+#ifndef FREECAD_PERSONAL_CAD
     a5->setShortcut(QKeySequence(QStringLiteral("V,6")));
+#endif
     a5->setWhatsThis(QString::fromLatin1(getWhatsThis()));
     QAction* a6 = pcAction->addAction(QString());
     a6->setCheckable(true);
     a6->setIcon(BitmapFactory().iconFromTheme("DrawStyleFlatLines"));
     a6->setObjectName(QStringLiteral("Std_DrawStyleFlatLines"));
+#ifndef FREECAD_PERSONAL_CAD
     a6->setShortcut(QKeySequence(QStringLiteral("V,7")));
+#endif
     a6->setWhatsThis(QString::fromLatin1(getWhatsThis()));
 
     pcAction->setIcon(a0->icon());
@@ -2938,6 +2961,333 @@ void StdBoxElementSelection::activated(int iMsg)
 }
 
 
+#ifdef FREECAD_PERSONAL_CAD
+namespace
+{
+enum class StrokeSelectionMode
+{
+    Freeform,
+    Paint,
+};
+
+// Capture the stroke at the widget level so the normal viewer never receives a
+// partially consumed drag. Commit selection only once the complete stroke is known.
+class StrokeSelection final: public QWidget
+{
+public:
+    static void begin(View3DInventorViewer* viewer, StrokeSelectionMode mode)
+    {
+        if (!viewer || viewer->isSelecting() || !viewer->isSelectionEnabled()
+            || QApplication::mouseButtons() != Qt::NoButton) {
+            return;
+        }
+        if (active) {
+            active->finish();
+        }
+        active = new StrokeSelection(viewer, mode);
+    }
+
+private:
+    StrokeSelection(View3DInventorViewer* viewer, StrokeSelectionMode mode)
+        : QWidget(viewer->getGLWidget())
+        , viewer(viewer)
+        , mode(mode)
+        , previousCursor(parentWidget()->cursor())
+        , hadCursor(parentWidget()->testAttribute(Qt::WA_SetCursor))
+    {
+        setAttribute(Qt::WA_TransparentForMouseEvents);
+        setFocusPolicy(Qt::NoFocus);
+        setGeometry(parentWidget()->rect());
+        parentWidget()->setCursor(Qt::CrossCursor);
+        viewer->setFocus();
+        parentWidget()->installEventFilter(this);
+        viewer->installEventFilter(this);
+    }
+
+    void finish()
+    {
+        active.clear();
+        parentWidget()->removeEventFilter(this);
+        if (viewer) {
+            viewer->removeEventFilter(this);
+        }
+        if (hadCursor) {
+            parentWidget()->setCursor(previousCursor);
+        }
+        else {
+            parentWidget()->unsetCursor();
+        }
+        hide();
+        deleteLater();
+    }
+
+    void cancel()
+    {
+        if (!path.isEmpty() && QApplication::mouseButtons().testFlag(Qt::LeftButton)) {
+            // The press was consumed by this filter. The native viewer must
+            // not see the release as a click on geometry or empty space.
+            discardRelease = true;
+            hide();
+        }
+        else {
+            finish();
+        }
+    }
+
+    bool eventFilter(QObject* target, QEvent* event) override
+    {
+        if (discardRelease) {
+            if (target == parentWidget() && event->type() == QEvent::MouseButtonRelease
+                && static_cast<QMouseEvent*>(event)->button() == Qt::LeftButton) {
+                finish();
+                return true;
+            }
+            if (target == parentWidget() && event->type() == QEvent::MouseButtonPress
+                && static_cast<QMouseEvent*>(event)->button() == Qt::LeftButton) {
+                // The release may have gone to another window after focus changed.
+                finish();
+            }
+            return false;
+        }
+        if (!viewer || event->type() == QEvent::FocusOut || event->type() == QEvent::Hide
+            || event->type() == QEvent::Resize) {
+            cancel();
+            return false;
+        }
+        if ((event->type() == QEvent::ShortcutOverride || event->type() == QEvent::KeyPress)
+            && static_cast<QKeyEvent*>(event)->key() == Qt::Key_Escape) {
+            event->accept();
+            if (event->type() == QEvent::KeyPress) {
+                cancel();
+            }
+            return true;
+        }
+        const auto type = event->type();
+        if (target != parentWidget() || (type != QEvent::MouseButtonPress
+            && type != QEvent::MouseButtonRelease && type != QEvent::MouseMove)) {
+            return false;
+        }
+        if (viewer->isSelecting()) {
+            const bool capturedRelease = !path.isEmpty() && type == QEvent::MouseButtonRelease
+                && static_cast<QMouseEvent*>(event)->button() == Qt::LeftButton;
+            cancel();
+            return capturedRelease;
+        }
+        switch (type) {
+            case QEvent::MouseButtonPress: {
+                auto* mouse = static_cast<QMouseEvent*>(event);
+                if (mouse->button() != Qt::LeftButton) {
+                    cancel();
+                    return false;
+                }
+                path.append(mouse->position());
+                show();
+                raise();
+                return true;
+            }
+            case QEvent::MouseMove: {
+                if (path.isEmpty()) {
+                    return false;
+                }
+                auto* mouse = static_cast<QMouseEvent*>(event);
+                if ((mouse->position() - path.last()).manhattanLength() >= 3) {
+                    path.append(mouse->position());
+                    update();
+                }
+                return true;
+            }
+            case QEvent::MouseButtonRelease: {
+                auto* mouse = static_cast<QMouseEvent*>(event);
+                if (mouse->button() != Qt::LeftButton || path.isEmpty()) {
+                    return false;
+                }
+                path.append(mouse->position());
+                const bool additive = mouse->modifiers().testFlag(Qt::ControlModifier);
+                finish();
+                apply(additive);
+                return true;
+            }
+            default:
+                return false;
+        }
+    }
+
+    void paintEvent(QPaintEvent*) override
+    {
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+        QColor color = palette().color(QPalette::Highlight);
+        painter.setPen(QPen(color, mode == StrokeSelectionMode::Paint ? 5 : 1.5));
+        if (mode == StrokeSelectionMode::Paint) {
+            painter.drawPolyline(path);
+        }
+        else {
+            color.setAlpha(45);
+            painter.setBrush(color);
+            painter.drawPolygon(path);
+        }
+    }
+
+    void apply(bool additive)
+    {
+        if (!viewer || viewer->getDocument() != Application::Instance->activeDocument()) {
+            return;
+        }
+        const auto logicalSize = SbVec2s(
+            static_cast<short>(parentWidget()->width()),
+            static_cast<short>(parentWidget()->height())
+        );
+        std::vector<SbVec2s> points;
+        points.reserve(path.size());
+        for (const auto& point : path) {
+            points.push_back(SIM::Coin3D::Quarter::InputDevice::toDevicePixelPosition(
+                point,
+                logicalSize,
+                viewer->devicePixelRatio()
+            ));
+        }
+        if (mode == StrokeSelectionMode::Freeform) {
+            if (points.size() >= 3) {
+                applyBoxSelection(viewer, points, false, additive);
+            }
+        }
+        else {
+            paintSelect(points, additive);
+        }
+    }
+
+    void paintSelect(const std::vector<SbVec2s>& points, bool additive)
+    {
+        auto* render = viewer->getSoRenderManager();
+        auto* scene = render->getSceneGraph();
+        auto* doc = viewer->getDocument()->getDocument();
+        if (!scene || !doc) {
+            return;
+        }
+        const std::string document = doc->getName();
+        SoRayPickAction pick(render->getViewportRegion());
+        pick.setRadius(viewer->getPickRadius());
+
+        std::vector<std::pair<std::string, std::string>> hits;
+        const auto collect = [&](const SbVec2s& position) {
+            pick.setPoint(position);
+            pick.apply(scene);
+            const auto* point = pick.getPickedPoint();
+            if (!point) {
+                return;
+            }
+            auto* provider = freecad_cast<ViewProviderDocumentObject*>(
+                viewer->getViewProviderByPath(point->getPath())
+            );
+            std::string subelement;
+            if (provider && provider->isSelectable() && provider->getObject()
+                && provider->getObject()->isAttachedToDocument()
+                && provider->getElementPicked(point, subelement)) {
+                std::pair<std::string, std::string> hit {
+                    provider->getObject()->getNameInDocument(), std::move(subelement)
+                };
+                if (std::ranges::find(hits, hit) == hits.end()) {
+                    hits.push_back(std::move(hit));
+                }
+            }
+        };
+
+        // Sample by distance so a fast drag still picks geometry between mouse events.
+        // Bound scene traversals on long strokes.
+        const auto distance = [](const SbVec2s& from, const SbVec2s& to) {
+            return std::hypot(to[0] - from[0], to[1] - from[1]);
+        };
+        double strokeLength = 0.0;
+        for (size_t i = 1; i < points.size(); ++i) {
+            strokeLength += distance(points[i - 1], points[i]);
+        }
+        constexpr double sampleLimit = 128.0;
+        const double spacing = std::max(4.0, strokeLength / sampleLimit);
+        double nextSample = spacing;
+        collect(points.front());
+        for (size_t i = 1; i < points.size(); ++i) {
+            const auto& from = points[i - 1];
+            const auto& to = points[i];
+            const double length = distance(from, to);
+            if (length == 0.0) {
+                continue;
+            }
+            for (; nextSample <= length; nextSample += spacing) {
+                const double fraction = nextSample / length;
+                collect(SbVec2s(
+                    static_cast<short>(std::lround(from[0] + fraction * (to[0] - from[0]))),
+                    static_cast<short>(std::lround(from[1] + fraction * (to[1] - from[1])))
+                ));
+            }
+            nextSample -= length;
+        }
+        collect(points.back());
+
+        if (!additive) {
+            Selection().clearSelection(document.c_str());
+        }
+        for (const auto& [object, subelement] : hits) {
+            Selection().addSelection(document.c_str(), object.c_str(), subelement.c_str());
+        }
+    }
+
+    static inline QPointer<StrokeSelection> active;
+    QPointer<View3DInventorViewer> viewer;
+    StrokeSelectionMode mode;
+    QCursor previousCursor;
+    bool hadCursor;
+    bool discardRelease = false;
+    QPolygonF path;
+};
+
+class PersonalCadStrokeSelectionCommand final: public Gui::Command
+{
+public:
+    explicit PersonalCadStrokeSelectionCommand(StrokeSelectionMode mode)
+        : Command(mode == StrokeSelectionMode::Freeform ? "PersonalCAD_FreeformSelection"
+                                                         : "PersonalCAD_PaintSelection")
+        , mode(mode)
+    {
+        sGroup = "Standard-View";
+        if (mode == StrokeSelectionMode::Freeform) {
+            sMenuText = QT_TR_NOOP("Freeform Selection");
+            sToolTipText = QT_TR_NOOP("Drag a freeform outline around objects to select them");
+            sPixmap = "edit-select-box";
+        }
+        else {
+            sMenuText = QT_TR_NOOP("Paint Selection");
+            sToolTipText = QT_TR_NOOP("Drag over geometry to select elements along the stroke");
+            sPixmap = "edit-element-select-box";
+        }
+        sStatusTip = sToolTipText;
+        eType = AlterSelection;
+    }
+
+    const char* className() const override
+    {
+        return "PersonalCadStrokeSelectionCommand";
+    }
+
+protected:
+    void activated(int) override
+    {
+        if (auto* view = qobject_cast<View3DInventor*>(getMainWindow()->activeWindow())) {
+            StrokeSelection::begin(view->getViewer(), mode);
+        }
+    }
+
+    bool isActive() override
+    {
+        return qobject_cast<View3DInventor*>(getMainWindow()->activeWindow()) != nullptr;
+    }
+
+private:
+    StrokeSelectionMode mode;
+};
+}  // namespace
+#endif
+
+
 //===========================================================================
 // Std_TreeSelection
 //===========================================================================
@@ -4280,6 +4630,10 @@ void CreateViewStdCommands()
     rcCmdMgr.addCommand(new StdViewBoxZoom());
     rcCmdMgr.addCommand(new StdBoxSelection());
     rcCmdMgr.addCommand(new StdBoxElementSelection());
+#ifdef FREECAD_PERSONAL_CAD
+    rcCmdMgr.addCommand(new PersonalCadStrokeSelectionCommand(StrokeSelectionMode::Freeform));
+    rcCmdMgr.addCommand(new PersonalCadStrokeSelectionCommand(StrokeSelectionMode::Paint));
+#endif
     rcCmdMgr.addCommand(new StdCmdTreeExpand());
     rcCmdMgr.addCommand(new StdCmdTreeCollapse());
     rcCmdMgr.addCommand(new StdCmdTreeSelectAllInstances());

@@ -1841,6 +1841,7 @@ bool shouldProceedAfterDependencyCycle()
         == QMessageBox::Yes;
 }
 
+#ifndef FREECAD_PERSONAL_CAD
 void handleDocumentRecomputeResult(const std::string& documentName, App::RecomputeFailure failure)
 {
     if (failure == App::RecomputeFailure::None) {
@@ -1865,6 +1866,7 @@ void handleDocumentRecomputeResult(const std::string& documentName, App::Recompu
     App::RecomputeRequest newRequest = App::RecomputeRequest::fromDocument(*document, /*force=*/true);
     App::GetApplication().queueRecomputeRequest(newRequest);
 }
+#endif
 
 void refreshDocumentSynchronously(App::Document& document)
 {
@@ -1892,6 +1894,10 @@ void StdCmdRefresh::activated([[maybe_unused]] int iMsg)
     App::AutoTransaction trans((eType & NoTransaction) ? 0 : openActiveDocumentCommand("Recompute"));
     auto doc = getActiveGuiDocument()->getDocument();
 
+#ifdef FREECAD_PERSONAL_CAD
+    // A forced recompute can touch GUI-dependent features even on a clean document.
+    refreshDocumentSynchronously(*doc);
+#else
     App::RecomputeRequest request
         = App::RecomputeRequest::fromDocument(*doc, true, App::Document::DepNoCycle);
 
@@ -1913,11 +1919,16 @@ void StdCmdRefresh::activated([[maybe_unused]] int iMsg)
     };
 
     App::GetApplication().queueRecomputeRequest(request);
+#endif
 }
 
 bool StdCmdRefresh::isActive()
 {
+#ifdef FREECAD_PERSONAL_CAD
+    return this->getDocument() != nullptr;
+#else
     return this->getDocument() && this->getDocument()->mustExecute();
+#endif
 }
 
 //===========================================================================

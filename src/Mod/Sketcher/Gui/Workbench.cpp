@@ -175,6 +175,10 @@ inline const QStringList nonEditModeToolbarNames()
 
 void Workbench::activated()
 {
+#ifdef FREECAD_PERSONAL_CAD
+    // The design toolbar exposes the contextual sketch controls.
+    return;
+#endif
     /* The workbench may be activated with or without a sketch in edit mode, for
      * example when switching documents or returning from another workbench.
      *
@@ -205,6 +209,10 @@ void Workbench::activated()
 
 void Workbench::enterEditMode()
 {
+#ifdef FREECAD_PERSONAL_CAD
+    // The design toolbar exposes the contextual sketch controls.
+    return;
+#endif
     /* Ensure the state left by the non-edit mode toolbars is saved (in case of changing to edit
      * mode) without changing workbench
      */
@@ -225,6 +233,10 @@ void Workbench::enterEditMode()
 
 void Workbench::leaveEditMode()
 {
+#ifdef FREECAD_PERSONAL_CAD
+    // The design toolbar exposes the contextual sketch controls.
+    return;
+#endif
     Gui::ToolBarManager::getInstance()->setState(
         editModeToolbarNames(),
         Gui::ToolBarManager::State::SaveState

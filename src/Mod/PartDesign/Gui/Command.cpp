@@ -44,6 +44,9 @@
 #include <Gui/Control.h>
 #include <Gui/Document.h>
 #include <Gui/MainWindow.h>
+#ifdef FREECAD_PERSONAL_CAD
+#include <Gui/View3DInventor.h>
+#endif
 #include <Gui/Selection/Selection.h>
 #include <Gui/Selection/SelectionObject.h>
 #include <Mod/Sketcher/App/SketchObject.h>
@@ -634,6 +637,47 @@ bool CmdPartDesignNewSketch::isActive()
         return false;
     }
 }
+
+#ifdef FREECAD_PERSONAL_CAD
+class CmdPersonalCadSketchTool final: public Gui::Command
+{
+public:
+    CmdPersonalCadSketchTool(const char* id, const char* tool, const char* label, const char* icon)
+        : Command(id)
+        , tool(tool)
+    {
+        sAppModule = "PartDesign";
+        sGroup = QT_TR_NOOP("PartDesign");
+        sMenuText = label;
+        sToolTipText = QT_TRANSLATE_NOOP(
+            "CmdPersonalCadSketchTool", "Creates a sketch and starts the selected drawing tool"
+        );
+        sStatusTip = sToolTipText;
+        sPixmap = icon;
+    }
+
+    const char* className() const override
+    {
+        return "CmdPersonalCadSketchTool";
+    }
+
+    bool isActive() override
+    {
+        auto* document = getActiveGuiDocument();
+        return document && !document->getInEdit() && !Gui::Control().activeDialog()
+            && isViewOfType(Gui::View3DInventor::getClassTypeId());
+    }
+
+protected:
+    void activated(int) override
+    {
+        PartDesignGui::SketchWorkflow(getActiveGuiDocument()).createSketch(tool);
+    }
+
+private:
+    const char* tool;
+};
+#endif
 
 //===========================================================================
 // Common utility functions for all features creating solids
@@ -3012,6 +3056,21 @@ void CreatePartDesignCommands()
     rcCmdMgr.addCommand(new CmdPartDesignCS());
 
     rcCmdMgr.addCommand(new CmdPartDesignNewSketch());
+#ifdef FREECAD_PERSONAL_CAD
+    rcCmdMgr.addCommand(new CmdPersonalCadSketchTool(
+        "PersonalCAD_SketchLine", "Sketcher_CreateLine",
+        QT_TRANSLATE_NOOP("CmdPersonalCadSketchTool", "Start Sketch Line"), "Sketcher_CreateLine"
+    ));
+    rcCmdMgr.addCommand(new CmdPersonalCadSketchTool(
+        "PersonalCAD_SketchRectangle", "Sketcher_CreateRectangle",
+        QT_TRANSLATE_NOOP("CmdPersonalCadSketchTool", "Start Sketch Rectangle"),
+        "Sketcher_CreateRectangle"
+    ));
+    rcCmdMgr.addCommand(new CmdPersonalCadSketchTool(
+        "PersonalCAD_SketchCircle", "Sketcher_CreateCircle",
+        QT_TRANSLATE_NOOP("CmdPersonalCadSketchTool", "Start Sketch Circle"), "Sketcher_CreateCircle"
+    ));
+#endif
 
     rcCmdMgr.addCommand(new CmdPartDesignPad());
     rcCmdMgr.addCommand(new CmdPartDesignPocket());

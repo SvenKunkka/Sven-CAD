@@ -70,6 +70,9 @@
 
 #include "Application.h"
 #include "ApplicationPy.h"
+#ifdef FREECAD_PERSONAL_CAD
+#include "PersonalCadCommands.h"
+#endif
 #include "AxisOriginPy.h"
 #include "BitmapFactory.h"
 #include "Command.h"
@@ -1050,6 +1053,9 @@ void Application::createStandardOperations()
     Gui::CreateStructureCommands();
     Gui::CreateTestCommands();
     Gui::CreateLinkCommands();
+#ifdef FREECAD_PERSONAL_CAD
+    Gui::registerPersonalCadCommands(commandManager());
+#endif
 }
 
 void Application::slotNewDocument(const App::Document& Doc, bool isMainDoc)

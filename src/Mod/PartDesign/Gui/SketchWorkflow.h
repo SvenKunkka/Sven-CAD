@@ -24,6 +24,7 @@
 
 #pragma once
 
+#include <string>
 #include <tuple>
 #include <Mod/PartDesign/PartDesignGlobal.h>
 #include <Gui/Selection/SelectionFilter.h>
@@ -49,10 +50,10 @@ class SketchWorkflow
 {
 public:
     explicit SketchWorkflow(Gui::Document*);
-    void createSketch();
+    void createSketch(const std::string& initialTool = {});
 
 private:
-    void tryCreateSketch();
+    void tryCreateSketch(const std::string& initialTool);
     std::tuple<bool, PartDesign::Body*> shouldCreateBody();
     bool shouldAbort(bool) const;
     std::tuple<Gui::SelectionFilter, Gui::SelectionFilter, Gui::SelectionFilter> getFilters() const;

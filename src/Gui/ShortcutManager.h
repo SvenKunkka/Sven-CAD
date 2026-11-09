@@ -66,6 +66,8 @@ public:
      * @param defaultAccel: default shortcut
      */
     QString getShortcut(const char* cmd, const char* defaultAccel = nullptr);
+    /// Return the active build's default, without a user override.
+    static QKeySequence getDefaultShortcut(const char* cmd, const char* accel = nullptr);
 
     /// Return actions having a given shortcut in order of decreasing priority
     std::vector<std::pair<QByteArray, QAction*>> getActionsByShortcut(const QKeySequence& shortcut);

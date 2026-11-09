@@ -40,6 +40,9 @@
 #include "PythonWorkbenchPy.h"
 #include "Selection.h"
 #include "ToolBarManager.h"
+#ifdef FREECAD_PERSONAL_CAD
+#include "PersonalCadDesignToolbar.h"
+#endif
 #include "ToolBoxManager.h"
 #include "Window.h"
 
@@ -453,6 +456,17 @@ void Workbench::deactivated()
 bool Workbench::activate()
 {
     ToolBarItem* tb = setupToolBars();
+#ifdef FREECAD_PERSONAL_CAD
+    if (usesPersonalCadDesignToolbar(name())) {
+        for (auto* toolbar : tb->getItems()) {
+            const auto& id = toolbar->command();
+            if (id != "File" && id != "Edit" && id != "Workbench"
+                && toolbar->visibilityPolicy == ToolBarItem::DefaultVisibility::Visible) {
+                toolbar->visibilityPolicy = ToolBarItem::DefaultVisibility::Unavailable;
+            }
+        }
+    }
+#endif
     setupCustomToolbars(tb, "Toolbar");
     WorkbenchManipulator::changeToolBars(tb);
     ToolBarManager::getInstance()->setup(tb);

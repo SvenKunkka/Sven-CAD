@@ -37,12 +37,16 @@
 #include "ViewProviderMeasureDistance.h"
 #include "ViewProviderMeasureBase.h"
 #include "SoScreenSpaceScale.h"
+#ifndef FREECAD_PERSONAL_CAD
 #include "ViewProviderMassPropertiesResult.h"
+#endif
 
 
 // use a different name to CreateCommand()
 void CreateMeasureCommands();
+#ifndef FREECAD_PERSONAL_CAD
 void CreateMassPropertiesCommands();
+#endif
 
 
 namespace MeasureGui
@@ -90,7 +94,9 @@ PyMOD_INIT_FUNC(MeasureGui)
 
     // instantiating the commands
     CreateMeasureCommands();
+#ifndef FREECAD_PERSONAL_CAD
     CreateMassPropertiesCommands();
+#endif
 
     // clang-format off
     MeasureGui::DimensionLinear::initClass();
@@ -109,7 +115,9 @@ PyMOD_INIT_FUNC(MeasureGui)
     MeasureGui::ViewProviderMeasureDiameter            ::init();
     MeasureGui::ViewProviderMeasureCOM                 ::init();
 
+#ifndef FREECAD_PERSONAL_CAD
     MassPropertiesGui::ViewProviderMassPropertiesResult::init();
+#endif
     // clang-format on
 
     // register preferences pages

@@ -17,15 +17,18 @@ set (Measure_TR_QRC ${CMAKE_CURRENT_BINARY_DIR}/Resources/Measure_translation.qr
 qt_find_and_add_translation(QM_SRCS "Resources/translations/*_*.ts"
     ${CMAKE_CURRENT_BINARY_DIR}/Resources/translations)
 qt_create_resource_file(${Measure_TR_QRC} ${QM_SRCS})
+set(MeasureGui_QRC Resources/Measure.qrc)
+if(NOT FREECAD_PERSONAL_CAD)
+    list(APPEND MeasureGui_QRC Resources/MeasureMassProperties.qrc)
+endif()
 qt_add_resources(MeasureGui_SRCS
-    Resources/Measure.qrc
+    ${MeasureGui_QRC}
     ${Measure_TR_QRC}
     OPTIONS ${FREECAD_RCC_OPTIONS}
 )
 
 SET(MeasureGui_UIC_SRCS
     DlgPrefsMeasureAppearanceImp.ui
-    TaskMassProperties.ui
 )
 
 generate_from_py(QuickMeasure)
@@ -35,7 +38,7 @@ SET(MeasureGui_SRCS
     ${MeasureGui_SRCS}
     AppMeasureGui.cpp
     Command.cpp
-    Resources/Measure.qrc
+    ${MeasureGui_QRC}
     PreCompiled.h
     QuickMeasure.pyi
     QuickMeasurePyImp.cpp
@@ -43,9 +46,6 @@ SET(MeasureGui_SRCS
     QuickMeasure.h
     TaskMeasure.cpp
     TaskMeasure.h
-    TaskMassProperties.ui
-    TaskMassProperties.cpp
-    TaskMassProperties.h
     ViewProviderMeasureBase.cpp
     ViewProviderMeasureBase.h
     ViewProviderMeasureAngle.cpp
@@ -54,13 +54,22 @@ SET(MeasureGui_SRCS
     ViewProviderMeasureDistance.h
     SoScreenSpaceScale.cpp
     SoScreenSpaceScale.h
-    ViewProviderMassPropertiesResult.cpp
-    ViewProviderMassPropertiesResult.h
     DlgPrefsMeasureAppearanceImp.ui
     DlgPrefsMeasureAppearanceImp.cpp
     DlgPrefsMeasureAppearanceImp.h
 
 )
+
+if(NOT FREECAD_PERSONAL_CAD)
+    list(APPEND MeasureGui_UIC_SRCS TaskMassProperties.ui)
+    list(APPEND MeasureGui_SRCS
+        TaskMassProperties.ui
+        TaskMassProperties.cpp
+        TaskMassProperties.h
+        ViewProviderMassPropertiesResult.cpp
+        ViewProviderMassPropertiesResult.h
+    )
+endif()
 
 SET(MeasureGuiTaskDlgs_SRCS
     DlgPrefsMeasureAppearanceImp.ui

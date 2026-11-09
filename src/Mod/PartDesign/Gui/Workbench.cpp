@@ -463,8 +463,10 @@ Gui::MenuItem* Workbench::setupMenuBar() const
           << "Separator" << dressups << "Separator" << transformations << "Separator"
           << "PartDesign_Boolean"
           << "Separator"
+#ifndef FREECAD_PERSONAL_CAD
           << "Materials_InspectAppearance"
           << "Materials_InspectMaterial"
+#endif
           << "Separator"
           << "Part_CheckGeometry"
           << "Separator"

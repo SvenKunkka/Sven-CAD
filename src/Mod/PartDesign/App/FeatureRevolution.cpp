@@ -24,6 +24,7 @@
 
 #include "FeatureRevolution.h"
 
+#include <Base/Reader.h>
 #include <Base/ProgramVersion.h>
 
 using namespace PartDesign;

@@ -33,10 +33,12 @@ class Document;
 class ViewProvider;
 }  // namespace Gui
 
+#ifndef FREECAD_PERSONAL_CAD
 namespace Materials
 {
 class Material;
 }
+#endif
 
 namespace PartGui
 {
@@ -58,7 +60,9 @@ public:
 
 private:
     void setupConnections();
+#ifndef FREECAD_PERSONAL_CAD
     void onMaterialSelected(const std::shared_ptr<Materials::Material>& material);
+#endif
     void onDefaultButtonClicked();
     void onBoxSelectionToggled(bool checked);
     void onButtonCustomAppearanceClicked();
@@ -70,7 +74,9 @@ protected:
     void slotDeleteDocument(const Gui::Document&);
     void slotDeleteObject(const Gui::ViewProvider&);
     void updatePanel();
+#ifndef FREECAD_PERSONAL_CAD
     void syncMaterialWidget();
+#endif
     int getFirstIndex() const;
 
 private:

@@ -45,11 +45,6 @@ SET(MeasureModule_SRCS
     MeasureRadius.cpp
     MeasureRadius.h
 
-    MassPropertiesObject.cpp
-    MassPropertiesObject.h
-    MassPropertiesResult.cpp
-    MassPropertiesResult.h
-
     Preferences.cpp
     Preferences.h
 
@@ -58,6 +53,15 @@ SET(MeasureModule_SRCS
     SubnameHelper.cpp
     SubnameHelper.h
 )
+
+if(NOT FREECAD_PERSONAL_CAD)
+    list(APPEND MeasureModule_SRCS
+        MassPropertiesObject.cpp
+        MassPropertiesObject.h
+        MassPropertiesResult.cpp
+        MassPropertiesResult.h
+    )
+endif()
 
 SOURCE_GROUP("Module" FILES ${MeasureModule_SRCS})
 

@@ -229,6 +229,7 @@ PyObject* Part::PartExceptionOCCDimensionError;
 // clang-format off
 PyMOD_INIT_FUNC(Part)
 {
+#ifndef FREECAD_PERSONAL_CAD
     // load dependent module
     try {
         Base::Interpreter().runString("import Materials");
@@ -237,6 +238,7 @@ PyMOD_INIT_FUNC(Part)
         PyErr_SetString(PyExc_ImportError, e.what());
         PyMOD_Return(nullptr);
     }
+#endif
     Base::Console().log("Module: Part\n");
 
     // This is highly experimental and we should keep an eye on it

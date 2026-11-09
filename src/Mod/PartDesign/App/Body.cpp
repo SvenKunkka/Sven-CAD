@@ -518,8 +518,12 @@ void Body::onChanged(const App::Property* prop)
                 for (auto it : features) {
                     auto feature = dynamic_cast<Part::Feature*>(it);
                     if (feature) {
+#ifdef FREECAD_PERSONAL_CAD
+                        if (feature->ShapeMaterial.getValue() != ShapeMaterial.getValue()) {
+#else
                         if (feature->ShapeMaterial.getValue().getUUID()
                             != ShapeMaterial.getValue().getUUID()) {
+#endif
                             feature->ShapeMaterial.setValue(ShapeMaterial.getValue());
                         }
                     }

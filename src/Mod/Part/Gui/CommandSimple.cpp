@@ -105,6 +105,7 @@ bool CmdPartSimpleCylinder::isActive()
 //===========================================================================
 // Part_ShapeFromMesh
 //===========================================================================
+#ifndef FREECAD_PERSONAL_CAD
 DEF_STD_CMD_A(CmdPartShapeFromMesh)
 
 CmdPartShapeFromMesh::CmdPartShapeFromMesh()
@@ -230,6 +231,7 @@ bool CmdPartPointsFromMesh::isActive()
 //===========================================================================
 // Part_SimpleCopy
 //===========================================================================
+#endif
 DEF_STD_CMD_A(CmdPartSimpleCopy)
 
 CmdPartSimpleCopy::CmdPartSimpleCopy()
@@ -536,8 +538,10 @@ void CreateSimplePartCommands()
 {
     Gui::CommandManager& rcCmdMgr = Gui::Application::Instance->commandManager();
     rcCmdMgr.addCommand(new CmdPartSimpleCylinder());
+#ifndef FREECAD_PERSONAL_CAD
     rcCmdMgr.addCommand(new CmdPartShapeFromMesh());
     rcCmdMgr.addCommand(new CmdPartPointsFromMesh());
+#endif
     rcCmdMgr.addCommand(new CmdPartSimpleCopy());
     rcCmdMgr.addCommand(new CmdPartElementCopy());
     rcCmdMgr.addCommand(new CmdPartTransformedCopy());

@@ -22,8 +22,10 @@ set(Part_LIBS
     ${OCC_LIBRARIES}
     ${OCC_DEBUG_LIBRARIES}
     FreeCADApp
-    Materials
 )
+if(NOT FREECAD_PERSONAL_CAD)
+    list(APPEND Part_LIBS Materials)
+endif()
 
 target_link_directories(Part PUBLIC ${OCC_LIBRARY_DIR})
 

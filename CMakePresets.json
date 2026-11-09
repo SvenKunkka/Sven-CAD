@@ -366,8 +366,10 @@
           "BUILD_TECHDRAW": true,
           "BUILD_IMPORT": true,
           "BUILD_MEASURE": true,
-          "BUILD_SPREADSHEET": true,
-          "BUILD_MATERIAL": true
+          "BUILD_SPREADSHEET": false,
+          "BUILD_MATERIAL": false,
+          "BUILD_MATERIAL_EXTERNAL": false,
+          "BUILD_ADDONMGR": false
         }
       },
       {

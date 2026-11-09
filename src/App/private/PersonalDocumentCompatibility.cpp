@@ -23,7 +23,8 @@ bool isRemovedObjectType(std::string_view type)
         "Spreadsheet::", "Mesh::", "MeshPart::", "Fem::", "Robot::", "Path::",
         "Points::", "Inspection::", "Reen::", "ReverseEngineering::", "BIM::"
     };
-    return type == "Assembly::SimulationGroup" || type.starts_with("TechDraw::DrawViewSpreadsheet")
+    return type == "Assembly::SimulationGroup" || type == "Measure::Result"
+        || type.starts_with("TechDraw::DrawViewSpreadsheet")
         || std::ranges::any_of(prefixes, [type](auto prefix) { return type.starts_with(prefix); });
 }
 

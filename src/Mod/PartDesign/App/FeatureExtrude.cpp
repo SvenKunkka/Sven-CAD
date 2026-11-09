@@ -43,6 +43,7 @@
 
 #include <App/Document.h>
 #include <App/ObjectIdentifier.h>
+#include <Base/Reader.h>
 #include <Base/Converter.h>
 #include <Base/ProgramVersion.h>
 #include <Base/Tools.h>

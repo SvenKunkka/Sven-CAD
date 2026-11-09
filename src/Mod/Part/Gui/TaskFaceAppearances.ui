@@ -52,11 +52,7 @@
        </layout>
       </item>
       <item>
-       <layout class="QHBoxLayout" name="horizontalLayout_2">
-        <item>
-         <widget class="MatGui::MaterialTreeWidget" name="widgetMaterial" native="true"/>
-        </item>
-       </layout>
+       <layout class="QHBoxLayout" name="materialLayout"/>
       </item>
       <item>
        <layout class="QGridLayout" name="gridLayout">
@@ -134,14 +130,6 @@
    </item>
   </layout>
  </widget>
- <customwidgets>
-  <customwidget>
-   <class>MatGui::MaterialTreeWidget</class>
-   <extends>QWidget</extends>
-   <header>Mod/Material/Gui/MaterialTreeWidget.h</header>
-   <container>1</container>
-  </customwidget>
- </customwidgets>
  <resources/>
  <connections/>
 </ui>

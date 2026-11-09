@@ -26,7 +26,9 @@
 
 #include <App/FeaturePython.h>
 #include <App/GeoFeature.h>
+#ifndef FREECAD_PERSONAL_CAD
 #include <Mod/Material/App/PropertyMaterial.h>
+#endif
 #include <Mod/Part/PartGlobal.h>
 #include <Base/Bitmask.h>
 
@@ -74,7 +76,11 @@ public:
     ~Feature() override;
 
     PropertyPartShape Shape;
+#ifdef FREECAD_PERSONAL_CAD
+    App::PropertyMaterial ShapeMaterial;
+#else
     Materials::PropertyMaterial ShapeMaterial;
+#endif
 
     /** @name methods override feature */
     //@{
@@ -220,6 +226,11 @@ protected:
     App::DocumentObjectExecReturn* execute() override;
     void onBeforeChange(const App::Property* prop) override;
     void onChanged(const App::Property* prop) override;
+#ifdef FREECAD_PERSONAL_CAD
+    void handleChangedPropertyType(
+        Base::XMLReader& reader, const char* typeName, App::Property* prop
+    ) override;
+#endif
     void onDocumentRestored() override;
 
     void copyMaterial(Feature* feature);

@@ -128,7 +128,9 @@ PyMOD_INIT_FUNC(PartGui)
     // load needed modules
     try {
         Base::Interpreter().runString("import Part");
+#ifndef FREECAD_PERSONAL_CAD
         Base::Interpreter().runString("import MatGui");
+#endif
     }
     catch (const Base::Exception& e) {
         PyErr_SetString(PyExc_ImportError, e.what());

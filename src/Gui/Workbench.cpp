@@ -797,7 +797,11 @@ MenuItem* StdWorkbench::setupMenuBar() const
     }
 #endif
     *tool << "Std_Measure"
+#ifdef FREECAD_PERSONAL_CAD
+          << "Std_MeasureVolume"
+#else
           << "Std_MassProperties"
+#endif
           << "Std_UnitsCalculator"
           << "Std_ClarifySelection"
           << "Separator"
@@ -884,7 +888,10 @@ ToolBarItem* StdWorkbench::setupToolBars() const
     view->setCommand("View");
     *view << "Std_ViewFitAll" << "Std_ViewFitSelection" << "Std_ViewGroup" << "Std_AlignToSelection"
           << "Separator" << "Std_DrawStyle" << "Separator"
-          << "Std_Measure" << "Std_MassProperties";
+          << "Std_Measure";
+#ifndef FREECAD_PERSONAL_CAD
+    *view << "Std_MassProperties";
+#endif
 
     // Individual views
     auto individualViews = new ToolBarItem(root, ToolBarItem::DefaultVisibility::Hidden);

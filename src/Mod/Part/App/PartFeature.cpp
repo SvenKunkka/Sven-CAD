@@ -75,7 +75,12 @@
 #include <Base/Rotation.h>
 #include <Base/Stream.h>
 #include <Base/Tools.h>
+#ifdef FREECAD_PERSONAL_CAD
+#include <QUuid>
+#include <Base/Reader.h>
+#else
 #include <Mod/Material/App/MaterialManager.h>
+#endif
 
 #include "Geometry.h"
 #include "PartFeature.h"
@@ -95,8 +100,13 @@ PROPERTY_SOURCE(Part::Feature, App::GeoFeature)
 Feature::Feature()
 {
     ADD_PROPERTY(Shape, (TopoDS_Shape()));
+#ifdef FREECAD_PERSONAL_CAD
+    ADD_PROPERTY_TYPE(ShapeMaterial, (App::Material(App::Material::DEFAULT)), "Appearance",
+                      App::Prop_Hidden, "Saved shape appearance");
+#else
     auto mat = Materials::MaterialManager::defaultMaterial();
     ADD_PROPERTY(ShapeMaterial, (*mat));
+#endif
 }
 
 Feature::~Feature() = default;
@@ -138,6 +148,13 @@ PyObject* Feature::getPyObject()
 
 void Feature::copyMaterial(Feature* feature)
 {
+#ifdef FREECAD_PERSONAL_CAD
+    const App::Material defaultAppearance(App::Material::DEFAULT);
+    if (feature && ShapeMaterial.getValue() == defaultAppearance
+        && feature->ShapeMaterial.getValue() != defaultAppearance) {
+        ShapeMaterial.setValue(feature->ShapeMaterial.getValue());
+    }
+#else
     auto mat = Materials::MaterialManager::defaultMaterial();
     if (feature) {
         if (ShapeMaterial.getValue().getUUID() != feature->ShapeMaterial.getValue().getUUID()) {
@@ -146,6 +163,7 @@ void Feature::copyMaterial(Feature* feature)
             }
         }
     }
+#endif
 }
 
 void Feature::copyMaterial(App::DocumentObject* link)
@@ -911,7 +929,11 @@ TopoDS_Shape Feature::getShape(
 
 App::Material Feature::getMaterialAppearance() const
 {
+#ifdef FREECAD_PERSONAL_CAD
+    return ShapeMaterial.getValue();
+#else
     return ShapeMaterial.getValue().getMaterialAppearance();
+#endif
 }
 
 void Feature::setMaterialAppearance(const App::Material& material)
@@ -923,6 +945,27 @@ void Feature::setMaterialAppearance(const App::Material& material)
         e.reportException();
     }
 }
+
+#ifdef FREECAD_PERSONAL_CAD
+void Feature::handleChangedPropertyType(
+    Base::XMLReader& reader, const char* typeName, App::Property* prop
+)
+{
+    if (prop != &ShapeMaterial || std::string_view(typeName) != "Materials::PropertyMaterial") {
+        GeoFeature::handleChangedPropertyType(reader, typeName, prop);
+        return;
+    }
+
+    // Upstream stores only the library UUID here. The saved view owns its explicit face colors.
+    reader.readElement("PropertyMaterial");
+    const QUuid uuid(QString::fromLatin1(reader.getAttribute<const char*>("uuid", "")));
+    if (!uuid.isNull()) {
+        App::Material appearance = ShapeMaterial.getValue();
+        appearance.uuid = uuid.toString(QUuid::WithoutBraces).toStdString();
+        ShapeMaterial.setValue(appearance);
+    }
+}
+#endif
 
 // Toponaming project March 2024:  This method should be going away when we get to the python layer.
 void Feature::clearShapeCache()

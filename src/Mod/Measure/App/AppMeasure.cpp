@@ -46,7 +46,9 @@
 #include "MeasureArea.h"
 #include "MeasureDiameter.h"
 #include "MeasureRadius.h"
+#ifndef FREECAD_PERSONAL_CAD
 #include "MassPropertiesObject.h"
+#endif
 
 namespace Measure
 {
@@ -112,7 +114,9 @@ PyMOD_INIT_FUNC(Measure)
     Measure::MeasureArea::init();
     Measure::MeasureDiameter::init();
     Measure::MeasureRadius::init();
+#ifndef FREECAD_PERSONAL_CAD
     Measure::Result::init();
+#endif
 
     // Add fundamental umf Measure Types
 

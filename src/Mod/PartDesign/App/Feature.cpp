@@ -296,7 +296,11 @@ void Feature::onChanged(const App::Property* prop)
         else if (prop == &ShapeMaterial) {
             auto body = Body::findBodyOf(this);
             if (body) {
+#ifdef FREECAD_PERSONAL_CAD
+                if (body->ShapeMaterial.getValue() != ShapeMaterial.getValue()) {
+#else
                 if (body->ShapeMaterial.getValue().getUUID() != ShapeMaterial.getValue().getUUID()) {
+#endif
                     body->ShapeMaterial.setValue(ShapeMaterial.getValue());
                 }
             }

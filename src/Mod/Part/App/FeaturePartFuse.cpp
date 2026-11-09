@@ -35,6 +35,7 @@
 #include "modelRefine.h"
 #include "TopoShapeOpCode.h"
 
+#include <Base/Reader.h>
 #include <Base/ProgramVersion.h>
 
 

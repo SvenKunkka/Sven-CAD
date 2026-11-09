@@ -3,8 +3,10 @@
 set(PartGui_LIBS
     Part
     FreeCADGui
-    MatGui
 )
+if(NOT FREECAD_PERSONAL_CAD)
+    list(APPEND PartGui_LIBS MatGui)
+endif()
 
 if(BUILD_TRACY_FRAME_PROFILER)
     list(APPEND PartGui_LIBS TracyClient)

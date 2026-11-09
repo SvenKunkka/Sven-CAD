@@ -31,6 +31,7 @@
 #include <Standard_Failure.hxx>
 
 #include <App/Application.h>
+#include <Base/Reader.h>
 #include <Base/Exception.h>
 #include <Base/Parameter.h>
 #include <Base/ProgramVersion.h>

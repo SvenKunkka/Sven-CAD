@@ -56,7 +56,9 @@
 #include <Gui/View3DInventor.h>
 #include <Gui/View3DInventorViewer.h>
 
+#ifndef FREECAD_PERSONAL_CAD
 #include <Mod/Material/Gui/MaterialTreeWidget.h>
+#endif
 
 #include "TaskFaceAppearances.h"
 #include "ui_TaskFaceAppearances.h"
@@ -97,6 +99,9 @@ class FaceAppearances::Private
 public:
     using Connection = fastsignals::connection;
     Ui_TaskFaceAppearances* ui;
+#ifndef FREECAD_PERSONAL_CAD
+    MatGui::MaterialTreeWidget* materialWidget {nullptr};
+#endif
     QPointer<Gui::View3DInventorViewer> view;
     ViewProviderPartExt* vp;
     App::DocumentObject* obj;
@@ -260,11 +265,16 @@ FaceAppearances::FaceAppearances(ViewProviderPartExt* vp, QWidget* parent)
 {
     Q_UNUSED(parent);
     d->ui->setupUi(this);
+#ifndef FREECAD_PERSONAL_CAD
+    d->materialWidget = new MatGui::MaterialTreeWidget(d->ui->groupBox);
+    d->materialWidget->setObjectName(QStringLiteral("widgetMaterial"));
+    d->materialWidget->setEnabled(false);
+    d->ui->materialLayout->addWidget(d->materialWidget);
+#endif
     setupConnections();
 
     d->ui->groupBox->setTitle(QString::fromUtf8(vp->getObject()->Label.getValue()));
     d->ui->buttonCustomAppearance->setDisabled(true);
-    d->ui->widgetMaterial->setEnabled(false);
 
     setSelectionGate();
 
@@ -306,8 +316,10 @@ void FaceAppearances::setupConnections()
             this, &FaceAppearances::onDefaultButtonClicked);
     connect(d->ui->boxSelection, &QPushButton::toggled,
             this, &FaceAppearances::onBoxSelectionToggled);
-    connect(d->ui->widgetMaterial, &MatGui::MaterialTreeWidget::materialSelected,
+#ifndef FREECAD_PERSONAL_CAD
+    connect(d->materialWidget, &MatGui::MaterialTreeWidget::materialSelected,
             this, &FaceAppearances::onMaterialSelected);
+#endif
     connect(d->ui->buttonCustomAppearance, &QPushButton::clicked,
             this, &FaceAppearances::onButtonCustomAppearanceClicked);
     // clang-format on
@@ -372,6 +384,7 @@ void FaceAppearances::onDefaultButtonClicked()
     d->vp->ShapeAppearance.setValues(d->perface);
 }
 
+#ifndef FREECAD_PERSONAL_CAD
 void FaceAppearances::onMaterialSelected(const std::shared_ptr<Materials::Material>& material)
 {
     if (!d->index.isEmpty()) {
@@ -387,6 +400,7 @@ void FaceAppearances::onMaterialSelected(const std::shared_ptr<Materials::Materi
     }
 }
 
+#endif
 void FaceAppearances::onSelectionChanged(const Gui::SelectionChanges& msg)
 {
     // no object selected in the combobox or no sub-element was selected
@@ -450,11 +464,13 @@ void FaceAppearances::updatePanel()
 
     d->ui->labelElement->setText(faces);
     d->ui->buttonCustomAppearance->setDisabled(d->index.isEmpty());
-    d->ui->widgetMaterial->setEnabled(!d->index.isEmpty());
-
+#ifndef FREECAD_PERSONAL_CAD
+    d->materialWidget->setEnabled(!d->index.isEmpty());
     syncMaterialWidget();
+#endif
 }
 
+#ifndef FREECAD_PERSONAL_CAD
 /* Synchronizes the material widget with the currently selected faces. */
 void FaceAppearances::syncMaterialWidget()
 {
@@ -480,10 +496,11 @@ void FaceAppearances::syncMaterialWidget()
         }
     }
     // Block signals to prevent triggering onMaterialSelected during widget synchronization
-    QSignalBlocker blocker(d->ui->widgetMaterial);
-    d->ui->widgetMaterial->setMaterial(QString::fromStdString(materialUuid));
+    QSignalBlocker blocker(d->materialWidget);
+    d->materialWidget->setMaterial(QString::fromStdString(materialUuid));
 }
 
+#endif
 int FaceAppearances::getFirstIndex() const
 {
     if (!d->index.isEmpty()) {

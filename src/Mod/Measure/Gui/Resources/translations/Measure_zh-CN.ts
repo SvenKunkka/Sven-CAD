@@ -555,4 +555,23 @@
       <translation>几何中心</translation>
     </message>
   </context>
+  <context>
+    <name>StdCmdMeasureVolume</name>
+    <message>
+      <source>Measure Volume</source>
+      <translation>测量体积</translation>
+    </message>
+    <message>
+      <source>Measure the geometric volume of the selected solid</source>
+      <translation>测量所选实体的几何体积</translation>
+    </message>
+    <message>
+      <source>Select one solid.</source>
+      <translation>请选择一个实体。</translation>
+    </message>
+    <message>
+      <source>Volume: %1</source>
+      <translation>体积：%1</translation>
+    </message>
+  </context>
 </TS>

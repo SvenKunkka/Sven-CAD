@@ -124,8 +124,10 @@ Gui::MenuItem* Workbench::setupMenuBar() const
     *part << prim << "Part_Primitives"
           << "Part_Builder"
           << "Separator"
+#ifndef FREECAD_PERSONAL_CAD
           << "Part_ShapeFromMesh"
           << "Part_PointsFromMesh"
+#endif
           << "Part_MakeSolid"
           << "Part_ReverseShape" << copy << "Separator" << bop << join << split << compound
           << "Part_LinkArrays"
@@ -154,9 +156,10 @@ Gui::MenuItem* Workbench::setupMenuBar() const
           << "Part_EditAttachment"
           << "Separator"
           << "Part_CheckGeometry"
-          << "Part_Defeaturing"
-          << "Materials_InspectAppearance"
-          << "Materials_InspectMaterial";
+          << "Part_Defeaturing";
+#ifndef FREECAD_PERSONAL_CAD
+    *part << "Materials_InspectAppearance" << "Materials_InspectMaterial";
+#endif
 
     Gui::MenuItem* view = root->findItem("&View");
     if (view) {

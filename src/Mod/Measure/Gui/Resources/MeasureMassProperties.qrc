@@ -1,0 +1,8 @@
+<RCC>
+    <qresource prefix="/">
+        <file>icons/Measurement-Inertia.svg</file>
+        <file>icons/MassPropertiesIcon.svg</file>
+        <file>icons/COV-Icon.svg</file>
+        <file>icons/COG-Icon.svg</file>
+    </qresource>
+</RCC>

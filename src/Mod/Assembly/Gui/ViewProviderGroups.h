@@ -78,6 +78,7 @@ public:
     bool onDelete(const std::vector<std::string>&) override;
 };
 
+#ifndef FREECAD_PERSONAL_CAD
 class AssemblyGuiExport ViewProviderSimulationGroup: public ViewProviderGroupBase
 {
     PROPERTY_HEADER_WITH_OVERRIDE(AssemblyGui::ViewProviderSimulationGroup);
@@ -88,6 +89,7 @@ public:
 
     QIcon getIcon() const override;
 };
+#endif
 
 
 class AssemblyGuiExport ViewProviderSnapshotGroup: public ViewProviderGroupBase

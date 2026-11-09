@@ -71,6 +71,7 @@ public:
 };
 
 
+#ifndef FREECAD_PERSONAL_CAD
 class AssemblyExport SimulationGroup: public App::DocumentObjectGroup
 {
     PROPERTY_HEADER_WITH_OVERRIDE(Assembly::SimulationGroup);
@@ -87,6 +88,7 @@ public:
         return "AssemblyGui::ViewProviderSimulationGroup";
     }
 };
+#endif
 
 
 class AssemblyExport SnapshotGroup: public App::DocumentObjectGroup

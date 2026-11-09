@@ -28,7 +28,6 @@ set(Assembly_Scripts
     CommandSolveAssembly.py
     CommandCreateJoint.py
     CommandCreateView.py
-    CommandCreateSimulation.py
     CommandCreateSnapshot.py
     CommandExportASMT.py
     TestAssemblyWorkbench.py
@@ -38,6 +37,10 @@ set(Assembly_Scripts
     SoSwitchMarker.py
     UtilsAssembly.py
 )
+
+if(NOT FREECAD_PERSONAL_CAD)
+    list(APPEND Assembly_Scripts CommandCreateSimulation.py)
+endif()
 
 if(BUILD_GUI)
     list (APPEND Assembly_Scripts InitGui.py)
@@ -60,11 +63,13 @@ SET(AssemblyTests_SRCS
     AssemblyTests/TestCore.py
     AssemblyTests/TestCommandCreateView.py
     AssemblyTests/TestCommandInsertLink.py
-    AssemblyTests/TestSimulationExport.py
     AssemblyTests/mocks/__init__.py
     AssemblyTests/mocks/MockGui.py
 )
 
+if(NOT FREECAD_PERSONAL_CAD)
+    list(APPEND AssemblyTests_SRCS AssemblyTests/TestSimulationExport.py)
+endif()
 
 SET(all_files
     ${AssemblyTests_SRCS}

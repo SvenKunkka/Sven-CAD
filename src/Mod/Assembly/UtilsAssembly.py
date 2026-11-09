@@ -25,6 +25,7 @@ import math
 
 import FreeCAD as App
 import Part
+from AssemblyApp import hasMotionSimulation
 
 if App.GuiUp:
     import FreeCADGui as Gui
@@ -695,18 +696,20 @@ def getViewGroup(assembly):
     return view_group
 
 
-def getSimulationGroup(assembly):
-    sim_group = None
+if hasMotionSimulation:
 
-    for obj in assembly.OutList:
-        if obj.TypeId == "Assembly::SimulationGroup":
-            sim_group = obj
-            break
+    def getSimulationGroup(assembly):
+        sim_group = None
 
-    if not sim_group:
-        sim_group = assembly.newObject("Assembly::SimulationGroup", "Simulations")
+        for obj in assembly.OutList:
+            if obj.TypeId == "Assembly::SimulationGroup":
+                sim_group = obj
+                break
 
-    return sim_group
+        if not sim_group:
+            sim_group = assembly.newObject("Assembly::SimulationGroup", "Simulations")
+
+        return sim_group
 
 
 def getSnapshotGroup(assembly):

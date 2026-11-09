@@ -66,6 +66,7 @@ PyObject* AssemblyObjectPy::solve(PyObject* args) const
     return Py_BuildValue("i", ret);
 }
 
+#ifndef FREECAD_PERSONAL_CAD
 PyObject* AssemblyObjectPy::generateSimulation(PyObject* args) const
 {
     PyObject* pyobj;
@@ -77,6 +78,7 @@ PyObject* AssemblyObjectPy::generateSimulation(PyObject* args) const
     int ret = this->getAssemblyObjectPtr()->generateSimulation(obj);
     return Py_BuildValue("i", ret);
 }
+#endif
 
 PyObject* AssemblyObjectPy::ensureIdentityPlacements(PyObject* args) const
 {
@@ -87,6 +89,7 @@ PyObject* AssemblyObjectPy::ensureIdentityPlacements(PyObject* args) const
     Py_Return;
 }
 
+#ifndef FREECAD_PERSONAL_CAD
 PyObject* AssemblyObjectPy::updateForFrame(PyObject* args) const
 {
     unsigned long index {};
@@ -111,6 +114,7 @@ PyObject* AssemblyObjectPy::numberOfFrames(PyObject* args) const
     size_t ret = this->getAssemblyObjectPtr()->numberOfFrames();
     return Py_BuildValue("k", ret);
 }
+#endif
 
 PyObject* AssemblyObjectPy::updateSolveStatus(PyObject* args) const
 {

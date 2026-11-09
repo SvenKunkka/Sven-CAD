@@ -41,6 +41,7 @@ class AssemblyObject(Part):
         """
         ...
 
+    # BEGIN MOTION SIMULATION API
     @constmethod
     def generateSimulation(self, simulationObject: DocumentObject, /) -> int:
         """
@@ -77,6 +78,7 @@ class AssemblyObject(Part):
     def numberOfFrames(self) -> int:
         """Return Number of frames"""
         ...
+    # END MOTION SIMULATION API
 
     @constmethod
     def updateSolveStatus(self) -> Any:

@@ -65,7 +65,9 @@ PyMOD_INIT_FUNC(AssemblyApp)
     Assembly::BomGroup::init();
     Assembly::JointGroup::init();
     Assembly::ViewGroup::init();
+#ifndef FREECAD_PERSONAL_CAD
     Assembly::SimulationGroup::init();
+#endif
     Assembly::SnapshotGroup::init();
 
     PyMOD_Return(mod);

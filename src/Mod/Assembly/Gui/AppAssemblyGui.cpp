@@ -65,7 +65,9 @@ PyMOD_INIT_FUNC(AssemblyGui)
     AssemblyGui::ViewProviderBomGroup::init();
     AssemblyGui::ViewProviderJointGroup::init();
     AssemblyGui::ViewProviderViewGroup::init();
+#ifndef FREECAD_PERSONAL_CAD
     AssemblyGui::ViewProviderSimulationGroup::init();
+#endif
     AssemblyGui::ViewProviderSnapshotGroup::init();
 
     PyMOD_Return(mod);

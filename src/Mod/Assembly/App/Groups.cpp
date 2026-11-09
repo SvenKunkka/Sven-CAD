@@ -32,7 +32,9 @@
 #include "Groups.h"
 #include "BomGroupPy.h"
 #include "JointGroupPy.h"
+#ifndef FREECAD_PERSONAL_CAD
 #include "SimulationGroupPy.h"
+#endif
 #include "SnapshotGroupPy.h"
 #include "ViewGroupPy.h"
 
@@ -41,7 +43,9 @@ using namespace Assembly;
 
 PROPERTY_SOURCE(Assembly::BomGroup, App::DocumentObjectGroup)
 PROPERTY_SOURCE(Assembly::JointGroup, App::DocumentObjectGroup)
+#ifndef FREECAD_PERSONAL_CAD
 PROPERTY_SOURCE(Assembly::SimulationGroup, App::DocumentObjectGroup)
+#endif
 PROPERTY_SOURCE(Assembly::SnapshotGroup, App::DocumentObjectGroup)
 PROPERTY_SOURCE(Assembly::ViewGroup, App::DocumentObjectGroup)
 
@@ -93,6 +97,7 @@ std::vector<App::DocumentObject*> JointGroup::getJoints()
 }
 
 
+#ifndef FREECAD_PERSONAL_CAD
 PyObject* SimulationGroup::getPyObject()
 {
     if (PythonObject.is(Py::_None())) {
@@ -101,6 +106,7 @@ PyObject* SimulationGroup::getPyObject()
     }
     return Py::new_reference_to(PythonObject);
 }
+#endif
 
 PyObject* SnapshotGroup::getPyObject()
 {

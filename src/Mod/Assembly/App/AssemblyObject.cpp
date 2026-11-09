@@ -48,7 +48,6 @@
 #include <Mod/Part/App/AttachExtension.h>
 
 #include <OndselSolver/CREATE.h>
-#include <OndselSolver/ASMTSimulationParameters.h>
 #include <OndselSolver/ASMTAssembly.h>
 #include <OndselSolver/ASMTMarker.h>
 #include <OndselSolver/ASMTPart.h>
@@ -71,15 +70,19 @@
 #include <OndselSolver/ASMTRackPinionJoint.h>
 #include <OndselSolver/ASMTRotationLimit.h>
 #include <OndselSolver/ASMTTranslationLimit.h>
-#include <OndselSolver/ASMTRotationalMotion.h>
-#include <OndselSolver/ASMTTranslationalMotion.h>
-#include <OndselSolver/ASMTGeneralMotion.h>
 #include <OndselSolver/ASMTScrewJoint.h>
 #include <OndselSolver/ASMTSphSphJoint.h>
 #include <OndselSolver/ASMTTime.h>
 #include <OndselSolver/ASMTConstantGravity.h>
 #include <OndselSolver/ExternalSystem.h>
 #include <OndselSolver/enum.h>
+
+#ifndef FREECAD_PERSONAL_CAD
+#include <OndselSolver/ASMTGeneralMotion.h>
+#include <OndselSolver/ASMTRotationalMotion.h>
+#include <OndselSolver/ASMTSimulationParameters.h>
+#include <OndselSolver/ASMTTranslationalMotion.h>
+#endif
 
 #include "AssemblyLink.h"
 #include "AssemblyObject.h"
@@ -323,7 +326,9 @@ int AssemblyObject::solve(bool enableRedo)
     objectPartMap.clear();
     rebuildRigidClusters();
     syncActiveRigidGroupPlacements();
+#ifndef FREECAD_PERSONAL_CAD
     motions.clear();
+#endif
 
     auto groundedObjs = fixGroundedParts();
     if (groundedObjs.empty()) {
@@ -460,6 +465,7 @@ void AssemblyObject::updateSolveStatus()
     signalSolverUpdate();
 }
 
+#ifndef FREECAD_PERSONAL_CAD
 int AssemblyObject::generateSimulation(App::DocumentObject* sim)
 {
     mbdAssembly = makeMbdAssembly();
@@ -531,6 +537,7 @@ size_t Assembly::AssemblyObject::numberOfFrames()
 {
     return mbdAssembly->numberOfFrames();
 }
+#endif
 
 bool AssemblyObject::requiresRigidSolveForMove(const std::vector<App::DocumentObject*>& movedParts)
 {
@@ -605,7 +612,9 @@ void AssemblyObject::prepareMbdForIslandDrag(std::vector<App::DocumentObject*> d
 
     mbdAssembly = makeMbdAssembly();
     objectPartMap.clear();
+#ifndef FREECAD_PERSONAL_CAD
     motions.clear();
+#endif
 
     auto seededParts = fixGroundedParts();
     for (auto* part : dragParts) {
@@ -1790,6 +1799,7 @@ void AssemblyObject::jointParts(std::vector<App::DocumentObject*> joints)
     }
 }
 
+#ifndef FREECAD_PERSONAL_CAD
 void Assembly::AssemblyObject::create_mbdSimulationParameters(App::DocumentObject* sim)
 {
     auto mbdSim = mbdAssembly->simulationParameters;
@@ -1810,6 +1820,7 @@ void Assembly::AssemblyObject::create_mbdSimulationParameters(App::DocumentObjec
     mbdSim->sethmax(1.0);
     mbdSim->seterrorTol(valueOf(sim, "fGlobalErrorTolerance"));
 }
+#endif
 
 std::shared_ptr<ASMTJoint> AssemblyObject::makeMbdJointOfType(App::DocumentObject* joint, JointType type)
 {
@@ -2083,8 +2094,13 @@ std::vector<std::shared_ptr<MbD::ASMTJoint>> AssemblyObject::makeMbdJoint(App::D
     mbdJoint->setMarkerI(fullMarkerNameI);
     mbdJoint->setMarkerJ(fullMarkerNameJ);
 
-    // Add limits if needed. We do not add if this is a simulation or their might clash.
-    if (motions.empty()) {
+    // Joint limits can clash with a prescribed motion.
+#ifdef FREECAD_PERSONAL_CAD
+    constexpr bool addJointLimits = true;
+#else
+    const bool addJointLimits = motions.empty();
+#endif
+    if (addJointLimits) {
         if (jointType == JointType::Slider || jointType == JointType::Cylindrical) {
             auto* pLenMin = dynamic_cast<App::PropertyFloat*>(joint->getPropertyByName("LengthMin"));
             auto* pLenMax = dynamic_cast<App::PropertyFloat*>(joint->getPropertyByName("LengthMax"));
@@ -2189,6 +2205,7 @@ std::vector<std::shared_ptr<MbD::ASMTJoint>> AssemblyObject::makeMbdJoint(App::D
             }
         }
     }
+#ifndef FREECAD_PERSONAL_CAD
     std::vector<App::DocumentObject*> done;
 
     auto replaceInitialValue =
@@ -2294,6 +2311,7 @@ std::vector<std::shared_ptr<MbD::ASMTJoint>> AssemblyObject::makeMbdJoint(App::D
             mbdAssembly->addMotion(ASMTmotion);
         }
     }
+#endif
 
     return {mbdJoint};
 }

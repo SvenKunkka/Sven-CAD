@@ -14,9 +14,15 @@ set (Assembly_TR_QRC ${CMAKE_CURRENT_BINARY_DIR}/Resources/Assembly_translation.
 qt_find_and_add_translation(QM_SRCS "Resources/translations/*_*.ts"
     ${CMAKE_CURRENT_BINARY_DIR}/Resources/translations)
 qt_create_resource_file(${Assembly_TR_QRC} ${QM_SRCS})
-qt_add_resources(AssemblyResource_SRCS
+set(AssemblyResourceFiles
     Resources/Assembly.qrc
     ${Assembly_TR_QRC}
+)
+if(NOT FREECAD_PERSONAL_CAD)
+    list(APPEND AssemblyResourceFiles Resources/AssemblySimulation.qrc)
+endif()
+qt_add_resources(AssemblyResource_SRCS
+    ${AssemblyResourceFiles}
     OPTIONS ${FREECAD_RCC_OPTIONS}
 )
 
@@ -27,11 +33,13 @@ generate_from_py(ViewProviderAssembly)
 set(AssemblyGui_UIC_SRCS
     TaskAssemblyCreateBom.ui
     TaskAssemblyCreateJoint.ui
-    TaskAssemblyCreateSimulation.ui
     TaskAssemblyCreateView.ui
     TaskAssemblyInsertLink.ui
     Assembly.ui
 )
+if(NOT FREECAD_PERSONAL_CAD)
+    list(APPEND AssemblyGui_UIC_SRCS TaskAssemblyCreateSimulation.ui)
+endif()
 
 SET(Python_SRCS
     ViewProviderAssembly.pyi

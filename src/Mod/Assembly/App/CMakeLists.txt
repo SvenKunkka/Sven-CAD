@@ -8,13 +8,43 @@ set(Assembly_LIBS
     OndselSolver
 )
 
-generate_from_py(AssemblyObject)
+if(FREECAD_PERSONAL_CAD)
+    # Omit the motion methods from the Python type itself in this edition.
+    set(AssemblyObjectStub "${CMAKE_CURRENT_SOURCE_DIR}/AssemblyObject.pyi")
+    # The binding generator derives the module name from the src/Mod path.
+    set(PersonalAssemblyObjectStub "${CMAKE_BINARY_DIR}/src/Mod/Assembly/App/AssemblyObject.pyi")
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${AssemblyObjectStub}")
+    file(READ "${AssemblyObjectStub}" AssemblyObjectStubContents)
+    string(REGEX REPLACE "    # BEGIN MOTION SIMULATION API\n[^#]*    # END MOTION SIMULATION API\n"
+        "" PersonalAssemblyObjectStubContents "${AssemblyObjectStubContents}")
+    if(PersonalAssemblyObjectStubContents STREQUAL AssemblyObjectStubContents)
+        message(FATAL_ERROR "Unable to remove motion simulation methods from AssemblyObject.pyi")
+    endif()
+    file(CONFIGURE OUTPUT "${PersonalAssemblyObjectStub}" CONTENT "${PersonalAssemblyObjectStubContents}" @ONLY)
+
+    set(AssemblyBindingsDir "${CMAKE_SOURCE_DIR}/src/Tools/bindings")
+    set(AssemblyObjectBindingsHeader "${CMAKE_CURRENT_BINARY_DIR}/AssemblyObjectPy.h")
+    set(AssemblyObjectBindingsSource "${CMAKE_CURRENT_BINARY_DIR}/AssemblyObjectPy.cpp")
+    add_custom_command(
+        OUTPUT "${AssemblyObjectBindingsHeader}" "${AssemblyObjectBindingsSource}"
+        COMMAND "${Python3_EXECUTABLE}" "${AssemblyBindingsDir}/generate.py"
+            --outputPath "${CMAKE_CURRENT_BINARY_DIR}" "${PersonalAssemblyObjectStub}"
+        MAIN_DEPENDENCY "${PersonalAssemblyObjectStub}"
+        DEPENDS "${AssemblyBindingsDir}/generate.py" "${AssemblyBindingsDir}/templates/templateClassPyExport.py"
+        VERBATIM
+    )
+    add_custom_target(AssemblyObjectPythonBindings
+        DEPENDS "${AssemblyObjectBindingsHeader}" "${AssemblyObjectBindingsSource}"
+    )
+else()
+    generate_from_py(AssemblyObject)
+    generate_from_py(SimulationGroup)
+endif()
 generate_from_py(AssemblyLink)
 generate_from_py(BomObject)
 generate_from_py(BomGroup)
 generate_from_py(JointGroup)
 generate_from_py(ViewGroup)
-generate_from_py(SimulationGroup)
 generate_from_py(SnapshotGroup)
 
 
@@ -31,11 +61,12 @@ SET(Python_SRCS
     JointGroupPyImp.cpp
     ViewGroup.pyi
     ViewGroupPyImp.cpp
-    SimulationGroup.pyi
-    SimulationGroupPyImp.cpp
     SnapshotGroup.pyi
     SnapshotGroupPyImp.cpp
 )
+if(NOT FREECAD_PERSONAL_CAD)
+    list(APPEND Python_SRCS SimulationGroup.pyi SimulationGroupPyImp.cpp)
+endif()
 SOURCE_GROUP("Python" FILES ${Python_SRCS})
 
 SET(Module_SRCS
@@ -61,6 +92,9 @@ SET(Assembly_SRCS
 )
 
 add_library(Assembly SHARED ${Assembly_SRCS})
+if(FREECAD_PERSONAL_CAD)
+    add_dependencies(Assembly AssemblyObjectPythonBindings)
+endif()
 target_include_directories(
     Assembly
     PRIVATE

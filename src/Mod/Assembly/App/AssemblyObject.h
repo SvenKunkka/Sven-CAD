@@ -94,9 +94,11 @@ public:
     and redraw the joints Args : enableRedo : This store initial positions to enable undo while
     being in an active transaction (joint creation).*/
     int solve(bool enableRedo = false);
+#ifndef FREECAD_PERSONAL_CAD
     int generateSimulation(App::DocumentObject* sim);
     int updateForFrame(size_t index);
     size_t numberOfFrames();
+#endif
     void preDrag(std::vector<App::DocumentObject*> dragParts);
     void doDragStep();
     void postDrag();
@@ -120,7 +122,9 @@ public:
 
     // Ondsel Solver interface
     std::shared_ptr<MbD::ASMTAssembly> makeMbdAssembly();
+#ifndef FREECAD_PERSONAL_CAD
     void create_mbdSimulationParameters(App::DocumentObject* sim);
+#endif
     std::shared_ptr<MbD::ASMTPart> makeMbdPart(
         std::string& name,
         Base::Placement plc = Base::Placement(),
@@ -211,7 +215,9 @@ public:
 
     std::vector<AssemblyLink*> getSubAssemblies();
 
+#ifndef FREECAD_PERSONAL_CAD
     std::vector<App::DocumentObject*> getMotionsFromSimulation(App::DocumentObject* sim);
+#endif
 
     bool isMbDJointValid(App::DocumentObject* joint);
 
@@ -277,7 +283,9 @@ private:
     std::unordered_map<App::DocumentObject*, Base::Placement> rigidPlacementCache;
     std::vector<std::pair<App::DocumentObject*, double>> objMasses;
     std::vector<App::DocumentObject*> draggedParts;
+#ifndef FREECAD_PERSONAL_CAD
     std::vector<App::DocumentObject*> motions;
+#endif
 
     std::vector<std::pair<App::DocumentObject*, Base::Placement>> previousPositions;
 

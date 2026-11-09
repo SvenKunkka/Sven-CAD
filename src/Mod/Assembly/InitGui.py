@@ -59,6 +59,7 @@ class AssemblyWorkbench(Workbench):
         translate = FreeCAD.Qt.translate
 
         # load the builtin modules
+        from AssemblyApp import hasMotionSimulation
         import AssemblyGui
         from PySide import QtCore, QtGui
         from PySide.QtCore import QT_TRANSLATE_NOOP
@@ -69,7 +70,6 @@ class AssemblyWorkbench(Workbench):
         import CommandSolveAssembly
         import CommandExportASMT
         import CommandCreateView
-        import CommandCreateSimulation
         import CommandCreateSnapshot
         import CommandCreateBom
         import Preferences
@@ -89,9 +89,12 @@ class AssemblyWorkbench(Workbench):
             "Assembly_SolveAssembly",
             "Assembly_CreateView",
             "Assembly_CreateSnapshot",
-            "Assembly_CreateSimulation",
-            "Assembly_CreateBom",
         ]
+        if hasMotionSimulation:
+            import CommandCreateSimulation
+
+            cmdList.append("Assembly_CreateSimulation")
+        cmdList.append("Assembly_CreateBom")
 
         cmdListMenuOnly = [
             "Assembly_LinkSelectLinked",
@@ -156,6 +159,7 @@ class AssemblyWorkbench(Workbench):
                     return
 
     def setWatchers(self):
+        from AssemblyApp import hasMotionSimulation
         import UtilsAssembly
 
         translate = FreeCAD.Qt.translate
@@ -276,22 +280,6 @@ class AssemblyWorkbench(Workbench):
                     return False
                 return UtilsAssembly.assembly_has_at_least_n_parts(1)
 
-        class AssemblySimulationWatcher(AssemblyBaseWatcher):
-            """Shows 'Create Simulation' when specific motional joints exist."""
-
-            def __init__(self):
-                super().__init__()
-                self.commands = ["Assembly_CreateSimulation"]
-                self.title = translate("Assembly", "Simulation")
-
-            def shouldShow(self):
-                if not super().shouldShow():
-                    return False
-
-                joint_types = ["Revolute", "Slider", "Cylindrical"]
-                joints = UtilsAssembly.getJointsOfType(self.assembly, joint_types)
-                return len(joints) > 0
-
         watchers = [
             AssemblyCreateWatcher(),
             AssemblyActivateWatcher(),
@@ -299,8 +287,26 @@ class AssemblyWorkbench(Workbench):
             AssemblyGroundWatcher(),
             AssemblyJointsWatcher(),
             AssemblyToolsWatcher(),
-            AssemblySimulationWatcher(),
         ]
+        if hasMotionSimulation:
+
+            class AssemblySimulationWatcher(AssemblyBaseWatcher):
+                """Shows 'Create Simulation' when specific motional joints exist."""
+
+                def __init__(self):
+                    super().__init__()
+                    self.commands = ["Assembly_CreateSimulation"]
+                    self.title = translate("Assembly", "Simulation")
+
+                def shouldShow(self):
+                    if not super().shouldShow():
+                        return False
+
+                    joint_types = ["Revolute", "Slider", "Cylindrical"]
+                    joints = UtilsAssembly.getJointsOfType(self.assembly, joint_types)
+                    return len(joints) > 0
+
+            watchers.append(AssemblySimulationWatcher())
         FreeCADGui.Control.addTaskWatcher(watchers)
 
 

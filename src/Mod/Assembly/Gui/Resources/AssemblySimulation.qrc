@@ -1,0 +1,7 @@
+<RCC>
+    <qresource prefix="/">
+        <file>icons/Assembly_CreateSimulation.svg</file>
+        <file>icons/Assembly_SimulationGroup.svg</file>
+        <file>panels/TaskAssemblyCreateSimulation.ui</file>
+    </qresource>
+</RCC>

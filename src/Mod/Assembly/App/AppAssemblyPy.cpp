@@ -35,6 +35,12 @@ public:
         : Py::ExtensionModule<Module>("AssemblyApp")
     {
         initialize("This module is the Assembly module.");  // register with Python
+#ifdef FREECAD_PERSONAL_CAD
+        constexpr bool hasMotionSimulation = false;
+#else
+        constexpr bool hasMotionSimulation = true;
+#endif
+        moduleDictionary().setItem("hasMotionSimulation", Py::Boolean(hasMotionSimulation));
     }
 };
 

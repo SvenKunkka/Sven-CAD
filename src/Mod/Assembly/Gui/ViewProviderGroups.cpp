@@ -35,7 +35,9 @@ using namespace AssemblyGui;
 PROPERTY_SOURCE(AssemblyGui::ViewProviderGroupBase, Gui::ViewProviderDocumentObjectGroup)
 PROPERTY_SOURCE(AssemblyGui::ViewProviderBomGroup, AssemblyGui::ViewProviderGroupBase)
 PROPERTY_SOURCE(AssemblyGui::ViewProviderJointGroup, AssemblyGui::ViewProviderGroupBase)
+#ifndef FREECAD_PERSONAL_CAD
 PROPERTY_SOURCE(AssemblyGui::ViewProviderSimulationGroup, AssemblyGui::ViewProviderGroupBase)
+#endif
 PROPERTY_SOURCE(AssemblyGui::ViewProviderSnapshotGroup, AssemblyGui::ViewProviderGroupBase)
 PROPERTY_SOURCE(AssemblyGui::ViewProviderViewGroup, AssemblyGui::ViewProviderGroupBase)
 
@@ -49,10 +51,12 @@ QIcon ViewProviderJointGroup::getIcon() const
     return Gui::BitmapFactory().pixmap("Assembly_JointGroup.svg");
 }
 
+#ifndef FREECAD_PERSONAL_CAD
 QIcon ViewProviderSimulationGroup::getIcon() const
 {
     return Gui::BitmapFactory().pixmap("Assembly_SimulationGroup.svg");
 }
+#endif
 
 QIcon ViewProviderSnapshotGroup::getIcon() const
 {

@@ -87,16 +87,24 @@ Gui::Action* PartCmdSelectFilter::createAction()
 
     QAction* cmd0 = pcAction->addAction(QString());
     cmd0->setIcon(Gui::BitmapFactory().iconFromTheme("vertex-selection"));
+#ifndef FREECAD_PERSONAL_CAD
     cmd0->setShortcut(QKeySequence(QStringLiteral("X,S")));
+#endif
     QAction* cmd1 = pcAction->addAction(QString());
     cmd1->setIcon(Gui::BitmapFactory().iconFromTheme("edge-selection"));
+#ifndef FREECAD_PERSONAL_CAD
     cmd1->setShortcut(QKeySequence(QStringLiteral("E,S")));
+#endif
     QAction* cmd2 = pcAction->addAction(QString());
     cmd2->setIcon(Gui::BitmapFactory().iconFromTheme("face-selection"));
+#ifndef FREECAD_PERSONAL_CAD
     cmd2->setShortcut(QKeySequence(QStringLiteral("F,S")));
+#endif
     QAction* cmd3 = pcAction->addAction(QString());
     cmd3->setIcon(Gui::BitmapFactory().iconFromTheme("clear-selection"));
+#ifndef FREECAD_PERSONAL_CAD
     cmd3->setShortcut(QKeySequence(QStringLiteral("C,S")));
+#endif
 
     _pcAction = pcAction;
     languageChange();

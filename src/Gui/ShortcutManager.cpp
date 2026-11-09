@@ -24,6 +24,13 @@
 #include <QShortcutEvent>
 #include <QApplication>
 
+#ifdef FREECAD_PERSONAL_CAD
+#include <QAbstractSpinBox>
+#include <QPlainTextEdit>
+#include <QTextEdit>
+#include <algorithm>
+#endif
+
 #include <boost/algorithm/string/predicate.hpp>
 
 #include <Base/Console.h>
@@ -34,6 +41,48 @@
 #include "Action.h"
 
 using namespace Gui;
+
+#ifdef FREECAD_PERSONAL_CAD
+namespace
+{
+struct ModelingShortcut
+{
+    QLatin1StringView command;
+    QKeySequence keys;
+};
+
+// QKeySequence::PortableText uses Ctrl for Command on macOS.
+const ModelingShortcut fusionShortcuts[] = {
+    {QLatin1StringView("PersonalCAD_Extrude"), QKeySequence(Qt::Key_E)},
+    {QLatin1StringView("PartDesign_Hole"), QKeySequence(Qt::Key_H)},
+    {QLatin1StringView("PersonalCAD_PressPull"), QKeySequence(Qt::Key_Q)},
+    {QLatin1StringView("PartDesign_Fillet"), QKeySequence(Qt::Key_F)},
+    {QLatin1StringView("Std_Transform"), QKeySequence(Qt::Key_M)},
+    {QLatin1StringView("Std_ToggleVisibility"), QKeySequence(Qt::Key_V)},
+    {QLatin1StringView("PersonalCAD_ModelToolbox"), QKeySequence(Qt::Key_S)},
+    {QLatin1StringView("Part_ColorPerFace"), QKeySequence(Qt::Key_A)},
+    {QLatin1StringView("Std_Refresh"), QKeySequence(Qt::ControlModifier | Qt::Key_B)},
+    {QLatin1StringView("PersonalCAD_Joint"), QKeySequence(Qt::Key_J)},
+    // The Part Design variants start a new sketch outside edit mode.
+    {QLatin1StringView("PersonalCAD_SketchLine"), QKeySequence(Qt::Key_L)},
+    {QLatin1StringView("PersonalCAD_SketchRectangle"), QKeySequence(Qt::Key_R)},
+    {QLatin1StringView("PersonalCAD_SketchCircle"), QKeySequence(Qt::Key_C)},
+    {QLatin1StringView("Sketcher_CreateLine"), QKeySequence(Qt::Key_L)},
+    {QLatin1StringView("Sketcher_CreateRectangle"), QKeySequence(Qt::Key_R)},
+    {QLatin1StringView("Sketcher_CreateCircle"), QKeySequence(Qt::Key_C)},
+    {QLatin1StringView("Sketcher_Trimming"), QKeySequence(Qt::Key_T)},
+    {QLatin1StringView("Sketcher_Offset"), QKeySequence(Qt::Key_O)},
+    {QLatin1StringView("Std_Measure"), QKeySequence(Qt::Key_I)},
+    {QLatin1StringView("Sketcher_Projection"), QKeySequence(Qt::Key_P)},
+    {QLatin1StringView("Sketcher_ToggleConstruction"), QKeySequence(Qt::Key_X)},
+    {QLatin1StringView("Sketcher_Dimension"), QKeySequence(Qt::Key_D)},
+    {QLatin1StringView("Std_BoxSelection"), QKeySequence(Qt::Key_1)},
+    {QLatin1StringView("PersonalCAD_FreeformSelection"), QKeySequence(Qt::Key_2)},
+    {QLatin1StringView("PersonalCAD_PaintSelection"), QKeySequence(Qt::Key_3)},
+    {QLatin1StringView("Std_ViewFitAll"), QKeySequence(Qt::Key_F6)},
+};
+}  // namespace
+#endif
 
 ShortcutManager::ShortcutManager()
 {
@@ -153,11 +202,7 @@ void ShortcutManager::resetAll()
         hPriorities->Clear();
         for (auto cmd : Application::Instance->commandManager().getAllCommands()) {
             if (cmd->getAction()) {
-                auto accel = cmd->getAccel();
-                if (!accel) {
-                    accel = "";
-                }
-                cmd->setShortcut(getShortcut(nullptr, accel));
+                cmd->setShortcut(getDefaultShortcut(cmd->getName(), cmd->getAccel()).toString());
             }
         }
     }
@@ -165,24 +210,41 @@ void ShortcutManager::resetAll()
     priorityChanged("", 0);
 }
 
-QString ShortcutManager::getShortcut(const char* cmdName, const char* accel)
+QKeySequence ShortcutManager::getDefaultShortcut(const char* cmdName, const char* accel)
 {
-    if (!accel) {
+    if (!accel && cmdName) {
         if (auto cmd = Application::Instance->commandManager().getCommandByName(cmdName)) {
             accel = cmd->getAccel();
-            if (!accel) {
-                accel = "";
-            }
         }
     }
-    QString shortcut;
+    auto inherited = QKeySequence(QString::fromLatin1(accel));
+#ifdef FREECAD_PERSONAL_CAD
+    auto name = QLatin1StringView(cmdName);
+    for (const auto& shortcut : fusionShortcuts) {
+        if (shortcut.command == name) {
+            return shortcut.keys;
+        }
+    }
+    // A drawing dimension and a sketch dimension cannot be active in the same view.
+    if (cmdName && !inherited.isEmpty() && name != QLatin1StringView("TechDraw_Dimension")
+        && std::ranges::any_of(fusionShortcuts, [&inherited](const ModelingShortcut& shortcut) {
+               return shortcut.keys.matches(inherited) != QKeySequence::NoMatch;
+           })) {
+        return {};
+    }
+#endif
+    return inherited;
+}
+
+QString ShortcutManager::getShortcut(const char* cmdName, const char* accel)
+{
+    auto defaults = getDefaultShortcut(cmdName, accel);
     if (cmdName) {
-        shortcut = QString::fromLatin1(hShortcuts->GetASCII(cmdName, accel).c_str());
+        const auto binding = defaults.toString(QKeySequence::PortableText).toLatin1();
+        const auto saved = hShortcuts->GetASCII(cmdName, binding.constData());
+        return QKeySequence(QString::fromLatin1(saved.c_str())).toString(QKeySequence::NativeText);
     }
-    else {
-        shortcut = QString::fromLatin1(accel);
-    }
-    return QKeySequence(shortcut).toString(QKeySequence::NativeText);
+    return defaults.toString(QKeySequence::NativeText);
 }
 
 void ShortcutManager::setShortcut(const char* cmdName, const char* accel)
@@ -192,16 +254,10 @@ void ShortcutManager::setShortcut(const char* cmdName, const char* accel)
         if (!accel) {
             accel = "";
         }
-        if (auto cmd = Application::Instance->commandManager().getCommandByName(cmdName)) {
-            auto defaultAccel = cmd->getAccel();
-            if (!defaultAccel) {
-                defaultAccel = "";
-            }
-            if (QKeySequence(QString::fromLatin1(accel))
-                == QKeySequence(QString::fromLatin1(defaultAccel))) {
-                hShortcuts->RemoveASCII(cmdName);
-                return;
-            }
+        if (Application::Instance->commandManager().getCommandByName(cmdName)
+            && QKeySequence(QString::fromLatin1(accel)) == getDefaultShortcut(cmdName)) {
+            hShortcuts->RemoveASCII(cmdName);
+            return;
         }
         hShortcuts->SetASCII(cmdName, accel);
     }
@@ -315,6 +371,15 @@ bool ShortcutManager::eventFilter(QObject* o, QEvent* ev)
                     ev->accept();
                     return true;
                 }
+#ifdef FREECAD_PERSONAL_CAD
+                const auto* plainText = qobject_cast<const QPlainTextEdit*>(focusOrProxy);
+                const auto* richText = qobject_cast<const QTextEdit*>(focusOrProxy);
+                if ((plainText && !plainText->isReadOnly()) || (richText && !richText->isReadOnly())
+                    || qobject_cast<const QAbstractSpinBox*>(focusOrProxy)) {
+                    ev->accept();
+                    return true;
+                }
+#endif
             }
             break;
         }
@@ -505,7 +570,7 @@ void ShortcutManager::onTimer()
         for (int s : symbols) {
             QKeySequence k(shortcut + QLatin1Char(s));
             auto it = index.lower_bound(ActionKey(k));
-            if (it->key.shortcut != k) {
+            if (it == index.end() || it->key.shortcut != k) {
                 QKeyEvent* kev = new QKeyEvent(QEvent::KeyPress, s, Qt::ControlModifier, 0, 0, 0);
                 QApplication::postEvent(lastFocus, kev);
                 kev = new QKeyEvent(QEvent::KeyRelease, s, Qt::ControlModifier, 0, 0, 0);

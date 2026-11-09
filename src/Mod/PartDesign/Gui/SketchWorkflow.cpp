@@ -30,6 +30,7 @@
 #include <vector>
 #include <QApplication>
 #include <QMessageBox>
+#include <QTimer>
 
 
 #include "SketchWorkflow.h"
@@ -59,6 +60,7 @@
 #include <Gui/Command.h>
 #include <Gui/Control.h>
 #include <Gui/Document.h>
+#include <Gui/MDIView.h>
 #include <Gui/MainWindow.h>
 #include <Gui/ViewParams.h>
 #include <Gui/ViewProviderPlane.h>
@@ -68,6 +70,43 @@ using namespace PartDesignGui;
 
 namespace
 {
+void enterSketch(
+    App::DocumentObject* sketch,
+    PartDesign::Body* body,
+    const std::string& initialTool
+)
+{
+    if (initialTool.empty()) {
+        PartDesignGui::setEdit(sketch, body);
+        return;
+    }
+    if (!sketch) {
+        return;
+    }
+
+    const App::DocumentObjectT sketchRef(sketch);
+    const auto sketchId = sketch->getID();
+    if (!PartDesignGui::setEdit(sketch, body)) {
+        return;
+    }
+    if (auto* view = Gui::getMainWindow()->activeWindow()) {
+        // Let the attachment task close before starting a drawing tool.
+        QTimer::singleShot(0, view, [view, sketchRef, sketchId, initialTool] {
+            auto* app = Gui::Application::Instance;
+            auto* document = app->activeDocument();
+            if (!document || Gui::getMainWindow()->activeWindow() != view) {
+                return;
+            }
+            auto* provider = dynamic_cast<SketcherGui::ViewProviderSketch*>(document->getInEdit());
+            auto* object = sketchRef.getObject();
+            if (provider && object && object->getID() == sketchId
+                && provider->getObject() == object && provider->isInEditMode()) {
+                app->commandManager().runCommandByName(initialTool.c_str());
+            }
+        });
+    }
+}
+
 struct RejectException
 {
 };
@@ -280,7 +319,7 @@ public:
         handleIfSupportOutOfBody(selectedObject);
     }
 
-    void createSketchOnSupport(const std::string& supportString)
+    void createSketchOnSupport(const std::string& supportString, const std::string& initialTool)
     {
         // create Sketch on Face or Plane
         App::Document* appdocument = guidocument->getDocument();
@@ -304,7 +343,7 @@ public:
             );
         }
         Gui::Command::updateActive();
-        PartDesignGui::setEdit(Feat, activeBody);
+        enterSketch(Feat, activeBody, initialTool);
     }
 
 private:
@@ -546,12 +585,12 @@ public:
         , activeBody(activeBody)
     {}
 
-    void findSupport()
+    void findSupport(const std::string& initialTool)
     {
         try {
             // Start command early, so undo will undo any Body creation
             guidocument->openCommand(QT_TRANSLATE_NOOP("Command", "New Sketch"));
-            tryFindSupport();
+            tryFindSupport(initialTool);
         }
         catch (const RejectException&) {
             guidocument->abortCommand();
@@ -564,11 +603,11 @@ public:
     }
 
 private:
-    void tryFindSupport()
+    void tryFindSupport(const std::string& initialTool)
     {
         createBodyOrThrow();
 
-        createSketchAndShowAttachment();
+        createSketchAndShowAttachment(initialTool);
     }
 
     void createBodyOrThrow()
@@ -605,7 +644,7 @@ private:
         }
     }
 
-    void createSketchAndShowAttachment()
+    void createSketchAndShowAttachment(const std::string& initialTool)
     {
         setOriginTemporaryVisibility();
 
@@ -622,7 +661,7 @@ private:
         // The attachment dialog can outlive the body and sketch (e.g. they are deleted while it
         // is open), so the callbacks look them up by name instead of holding raw pointers.
         auto onAccept = [bodyRef = App::DocumentObjectT(activeBody),
-                         sketchRef = App::DocumentObjectT(sketch)]() {
+                         sketchRef = App::DocumentObjectT(sketch), initialTool]() {
             auto* partDesignBody = bodyRef.getObjectAs<PartDesign::Body>();
             if (!partDesignBody) {
                 return;
@@ -633,7 +672,7 @@ private:
             Gui::Selection().clearSelection();
 
             if (auto* sketchObj = sketchRef.getObject()) {
-                PartDesignGui::setEdit(sketchObj, partDesignBody);
+                enterSketch(sketchObj, partDesignBody, initialTool);
             }
         };
         auto onReject = [bodyRef = App::DocumentObjectT(activeBody)]() {
@@ -838,10 +877,10 @@ SketchWorkflow::SketchWorkflow(Gui::Document* document)
     appdocument = guidocument->getDocument();
 }
 
-void SketchWorkflow::createSketch()
+void SketchWorkflow::createSketch(const std::string& initialTool)
 {
     try {
-        tryCreateSketch();
+        tryCreateSketch(initialTool);
     }
     catch (const RejectException&) {
     }
@@ -875,7 +914,7 @@ void SketchWorkflow::createSketch()
     }
 }
 
-void SketchWorkflow::tryCreateSketch()
+void SketchWorkflow::tryCreateSketch(const std::string& initialTool)
 {
     auto result = shouldCreateBody();
     auto shouldMakeBody = std::get<0>(result);
@@ -903,7 +942,7 @@ void SketchWorkflow::tryCreateSketch()
     if (!useAttachment && !shiftHeld && sketchOnFace.isSingleFaceOrPlane()) {
         try {
             sketchOnFace.createSupport();
-            sketchOnFace.createSketchOnSupport(sketchOnFace.getSupport());
+            sketchOnFace.createSketchOnSupport(sketchOnFace.getSupport(), initialTool);
             return;
         }
         catch (const WrongSupportException&) {
@@ -918,7 +957,7 @@ void SketchWorkflow::tryCreateSketch()
     }
 
     SketchRequestSelection requestSelection {guidocument, activeBody};
-    requestSelection.findSupport();
+    requestSelection.findSupport(initialTool);
 }
 
 std::tuple<bool, PartDesign::Body*> SketchWorkflow::shouldCreateBody()

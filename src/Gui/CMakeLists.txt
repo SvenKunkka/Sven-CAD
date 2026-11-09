@@ -1164,6 +1164,10 @@ SET(Widget_HPP_SRCS
     FontScaledSVG.h
     SplitButton.h
 )
+if(FREECAD_PERSONAL_CAD)
+    list(APPEND Widget_CPP_SRCS PersonalCadDesignToolbar.cpp PersonalCadCommands.cpp)
+endif()
+
 SET(Widget_SRCS
     ${Widget_CPP_SRCS}
     ${Widget_HPP_SRCS}

@@ -1,0 +1,87 @@
+import json
+import os
+import traceback
+from pathlib import Path
+
+import FreeCAD as App
+import FreeCADGui as Gui
+from PySide6.QtCore import QEvent, QPoint, QPointF, Qt, QTimer
+from PySide6.QtGui import QMouseEvent
+from PySide6.QtTest import QTest
+from PySide6.QtWidgets import QApplication
+
+
+def send_mouse(widget, event_type, point, modifiers=Qt.KeyboardModifier.NoModifier):
+    left = Qt.MouseButton.LeftButton
+    none = Qt.MouseButton.NoButton
+    button = none if event_type == QEvent.Type.MouseMove else left
+    buttons = none if event_type == QEvent.Type.MouseButtonRelease else left
+    event = QMouseEvent(event_type, QPointF(point), QPointF(widget.mapToGlobal(point)), button, buttons, modifiers)
+    QApplication.sendEvent(widget, event)
+
+
+def run():
+    try:
+        Gui.activateWorkbench("PartDesignWorkbench")
+        doc = App.newDocument("SelectionSmoke")
+        for index in range(3):
+            box = doc.addObject("Part::Box", f"Box{index}")
+            box.Length = 12
+            box.Width = 12
+            box.Height = 8
+            box.Placement.Base = App.Vector(28 * index, 0, 0)
+        doc.recompute()
+        view = Gui.activeDocument().activeView()
+        view.viewTop()
+        view.fitAll()
+        Gui.updateGui()
+        graphics_view = view.graphicsView()
+        viewport = graphics_view.viewport()
+        window = Gui.getMainWindow()
+        ratio = viewport.devicePixelRatioF()
+
+        def pixel(x, y):
+            sx, sy = view.getPointOnViewport(x, y, 8)
+            return QPoint(round(sx / ratio), viewport.height() - round(sy / ratio) - 1)
+
+        def stroke(key, points):
+            window.raise_()
+            window.activateWindow()
+            viewport.setFocus()
+            QTest.qWait(120)
+            focus = QApplication.focusWidget()
+            focus_name = None if focus is None else focus.metaObject().className()
+            assert focus in (graphics_view, viewport), f"Unexpected focus widget: {focus_name}"
+            QTest.keyClick(focus, key)
+            QTest.qWait(180)
+            send_mouse(viewport, QEvent.Type.MouseButtonPress, points[0])
+            for point in points[1:]:
+                send_mouse(viewport, QEvent.Type.MouseMove, point)
+            send_mouse(viewport, QEvent.Type.MouseButtonRelease, points[-1])
+            Gui.updateGui()
+
+        def selection():
+            return [(item.ObjectName, list(item.SubElementNames)) for item in Gui.Selection.getSelectionEx()]
+
+        stroke(
+            Qt.Key.Key_2,
+            [pixel(-3, -3), pixel(15, -3), pixel(15, 15), pixel(-3, 15), pixel(-3, -3)],
+        )
+        freeform = selection()
+        assert [name for name, _ in freeform] == ["Box0"], freeform
+
+        stroke(Qt.Key.Key_3, [pixel(6, 6), pixel(62, 6)])
+        paint = selection()
+        assert [name for name, _ in paint] == ["Box0", "Box1", "Box2"], paint
+        assert all(any(name.startswith("Face") for name in elements) for _, elements in paint), paint
+        result = {"ok": True, "freeform": freeform, "paint": paint, "ratio": ratio, "keyboard": ["2", "3"]}
+    except Exception:
+        result = {"ok": False, "traceback": traceback.format_exc()}
+    Path(os.environ["PERSONALCAD_SELECTION_SMOKE_RESULT"]).write_text(json.dumps(result), encoding="utf-8")
+    if App.ActiveDocument:
+        App.ActiveDocument.Label = "Selection smoke"
+        App.closeDocument(App.ActiveDocument.Name)
+    QTimer.singleShot(100, Gui.getMainWindow().close)
+
+
+QTimer.singleShot(800, run)

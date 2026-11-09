@@ -754,6 +754,11 @@ void ToolBarManager::setup(ToolBarItem* toolBarItems)
             toolbar->toggleViewAction()->setVisible(false);
         }
 
+#ifdef FREECAD_PERSONAL_CAD
+        if (toolbarName == "File" || toolbarName == "Edit") {
+            toolbar->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+        }
+#endif
         // Initialise toolbar item visibility
         toolbar->setVisible(visible);
 

@@ -61,6 +61,15 @@ string(JSON PACKAGE_VERSION_SUFFIX GET ${VERSION_JSON} "version_suffix")
 string(JSON PACKAGE_BUILD_VERSION GET ${VERSION_JSON} "build_version")
 
 project(${_PROJECT_NAME})
+
+option(FREECAD_PERSONAL_CAD "Build the personal macOS CAD edition" OFF)
+if(FREECAD_PERSONAL_CAD)
+    if(NOT APPLE)
+        message(FATAL_ERROR "The personal CAD edition targets macOS.")
+    endif()
+    add_compile_definitions(FREECAD_PERSONAL_CAD)
+endif()
+
 string(TIMESTAMP PACKAGE_COPYRIGHT_YEAR "%Y")
 
 set(PACKAGE_VERSION "${PACKAGE_VERSION_MAJOR}.${PACKAGE_VERSION_MINOR}.${PACKAGE_VERSION_PATCH}")

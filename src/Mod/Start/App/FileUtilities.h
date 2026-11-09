@@ -38,7 +38,9 @@ namespace Start
 const QLatin1String defaultThumbnailPath("thumbnails/Thumbnail.png");
 
 const QLatin1String defaultThumbnailName
-#if defined(Q_OS_LINUX)
+#if defined(FREECAD_PERSONAL_CAD)
+    ("PersonalCADStartThumbnails");
+#elif defined(Q_OS_LINUX)
     ("thumbnails/normal");
 #else
     ("FreeCADStartThumbnails");

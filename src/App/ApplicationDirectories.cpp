@@ -267,8 +267,11 @@ void ApplicationDirectories::configurePaths(std::map<std::string,std::string>& m
 
     // Set application temporary directory
     //
-    std::vector<std::string> empty;
-    fs::path tmp = findPath(tempPath, customTemp, empty, true);
+    std::vector<std::string> tempSubdirs;
+#ifdef FREECAD_PERSONAL_CAD
+    tempSubdirs = subdirs;
+#endif
+    fs::path tmp = findPath(tempPath, customTemp, tempSubdirs, true);
     _temp = tmp;
     mConfig["AppTempPath"] = Base::FileInfo::pathToString(tmp) + PATHSEP;
 

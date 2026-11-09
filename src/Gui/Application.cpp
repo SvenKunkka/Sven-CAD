@@ -536,7 +536,11 @@ Application::Application(bool GUIenabled)
         // install the last active language
         ParameterGrp::handle hPGrp = App::GetApplication().GetUserParameter().GetGroup("BaseApp");
         hPGrp = hPGrp->GetGroup("Preferences")->GetGroup("General");
-        QString lang = QLocale::languageToString(QLocale().language());
+#ifdef FREECAD_PERSONAL_CAD
+        const QString lang = QStringLiteral("Chinese (Simplified)");
+#else
+        const QString lang = QLocale::languageToString(QLocale().language());
+#endif
         Translator::instance()->activateLanguage(
             hPGrp->GetASCII("Language", (const char*)lang.toLatin1()).c_str());
         GetWidgetFactorySupplier();

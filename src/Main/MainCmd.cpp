@@ -23,6 +23,7 @@
  ***************************************************************************/
 
 #include "../FCConfig.h"
+#include <ProductIdentity.h>
 
 #if HAVE_CONFIG_H
 # include <config.h>
@@ -69,7 +70,7 @@ int main(int argc, char** argv)
 #endif
 
     // Name and Version of the Application
-    App::Application::Config()["ExeName"] = "FreeCAD";
+    App::Application::Config()["ExeName"] = ProductIdentity::executableName;
     App::Application::Config()["ExeVendor"] = "FreeCAD";
     App::Application::Config()["AppDataSkipVendor"] = "true";
 

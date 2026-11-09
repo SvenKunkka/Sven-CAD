@@ -23,6 +23,7 @@
  ***************************************************************************/
 
 #include <FCConfig.h>
+#include <ProductIdentity.h>
 
 #if defined(_MSC_VER)
 # include <windows.h>
@@ -203,7 +204,7 @@ int main(int argc, char** argv)
 #endif
 
     // Name and Version of the Application
-    App::Application::Config()["ExeName"] = "FreeCAD";
+    App::Application::Config()["ExeName"] = ProductIdentity::executableName;
     App::Application::Config()["ExeVendor"] = "FreeCAD";
     App::Application::Config()["AppDataSkipVendor"] = "true";
     App::Application::Config()["MaintainerUrl"] = "https://freecad.org";
@@ -219,7 +220,10 @@ int main(int argc, char** argv)
     App::Application::Config()["SplashWarningColor"] = "#CA333B";
     App::Application::Config()["SplashInfoColor"] = "#212529";
     App::Application::Config()["SplashInfoPosition"] = "6,75";
-    App::Application::Config()["DesktopFileName"] = "org.freecad.FreeCAD";
+    App::Application::Config()["DesktopFileName"] = ProductIdentity::desktopId;
+#ifdef FREECAD_PERSONAL_CAD
+    App::Application::Config()["Application"] = ProductIdentity::displayName;
+#endif
 
     try {
         // Init phase ===========================================================

@@ -23,6 +23,7 @@
  ***************************************************************************/
 
 #include <FCConfig.h>
+#include <ProductIdentity.h>
 
 #if defined(FC_OS_WIN32)
 # include <windows.h>
@@ -80,7 +81,7 @@ BOOL APIENTRY DllMain(HANDLE hModule, DWORD ul_reason_for_call, LPVOID /*lpReser
 PyMOD_INIT_FUNC(FreeCAD)
 {
     // Init phase ===========================================================
-    App::Application::Config()["ExeName"] = "FreeCAD";
+    App::Application::Config()["ExeName"] = ProductIdentity::executableName;
     App::Application::Config()["ExeVendor"] = "FreeCAD";
     App::Application::Config()["AppDataSkipVendor"] = "true";
 

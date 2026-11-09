@@ -655,6 +655,10 @@ void initInterpreter(int argc, char* argv[])
     PyConfig_InitIsolatedConfig(&config);
     config.isolated = 0;
     config.user_site_directory = 1;
+#ifdef FREECAD_PERSONAL_CAD
+    // Keep Python imports from writing bytecode into the signed app bundle.
+    config.write_bytecode = 0;
+#endif
 
     status = PyConfig_SetBytesArgv(&config, argc, argv);
     if (PyStatus_Exception(status)) {

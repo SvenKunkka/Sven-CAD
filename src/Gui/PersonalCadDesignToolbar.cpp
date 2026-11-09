@@ -5,7 +5,7 @@
 #include <array>
 #include <initializer_list>
 
-#include <QApplication>
+#include <QFile>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QMenu>
@@ -81,8 +81,10 @@ class DesignToolbar : public QToolBar
 public:
     DesignToolbar(MainWindow& window, Application& app)
         : QToolBar(&window)
+        , mainWindow(window)
         , app(app)
         , host(new QWidget(this))
+        , workspace(new QToolButton(host))
         , tabs(new QTabBar(host))
         , scroll(new QScrollArea(host))
     {
@@ -91,10 +93,32 @@ public:
         setFloatable(false);
         setAllowedAreas(Qt::TopToolBarArea);
         toggleViewAction()->setVisible(false);
+        host->setObjectName(QStringLiteral("PersonalCadDesignHost"));
         host->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-        auto* column = new QVBoxLayout(host);
-        column->setContentsMargins(4, 1, 4, 1);
-        column->setSpacing(0);
+        auto* layout = new QHBoxLayout(host);
+        layout->setContentsMargins(8, 3, 8, 4);
+        layout->setSpacing(10);
+        layout->addWidget(workspace, 0, Qt::AlignVCenter);
+        auto* column = new QVBoxLayout;
+        column->setContentsMargins(0, 0, 0, 0);
+        column->setSpacing(2);
+        layout->addLayout(column, 1);
+
+        workspace->setObjectName(QStringLiteral("PersonalCadWorkspaceSelector"));
+        workspace->setPopupMode(QToolButton::InstantPopup);
+        auto* workspaceMenu = new QMenu(workspace);
+        workspace->setMenu(workspaceMenu);
+        if (auto* command = app.commandManager().getCommandByName("Std_Workbench")) {
+            command->initAction();
+            if (auto* group = qobject_cast<WorkbenchGroup*>(command->getAction())) {
+                workspaceMenu->addActions(group->getEnabledWbActions());
+                connect(group, &WorkbenchGroup::workbenchListRefreshed, workspaceMenu,
+                        [workspaceMenu](const QList<QAction*>& actions) {
+                            workspaceMenu->clear();
+                            workspaceMenu->addActions(actions);
+                        });
+            }
+        }
         tabs->setObjectName(QStringLiteral("PersonalCadDesignTabs"));
         tabs->setExpanding(false);
         tabs->setDrawBase(false);
@@ -104,11 +128,18 @@ public:
         tabs->setTabVisible(Sketch, false);
         column->addWidget(tabs);
         scroll->setObjectName(QStringLiteral("PersonalCadCommandGroups"));
+        scroll->viewport()->setObjectName(QStringLiteral("PersonalCadCommandViewport"));
         scroll->setFrameShape(QFrame::NoFrame);
         scroll->setWidgetResizable(true);
         scroll->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
         column->addWidget(scroll);
         addWidget(host);
+
+        QFile stylesheet(QStringLiteral("qss:PersonalCADDesign.qss"));
+        if (stylesheet.open(QIODevice::ReadOnly)) {
+            setStyleSheet(QString::fromUtf8(stylesheet.readAll()));
+        }
+
         update.setSingleShot(true);
         connect(&update, &QTimer::timeout, this, [this] { refresh(); });
         connect(tabs, &QTabBar::currentChanged, this, [this](int tab) { selectTab(tab); });
@@ -122,7 +153,6 @@ public:
         activeView = app.signalActivateView.connect([this](const MDIView*) { update.start(0); });
         commandsChanged = app.commandManager().signalChanged.connect([this] { update.start(0); });
 
-        window.addToolBarBreak(Qt::TopToolBarArea);
         window.addToolBar(Qt::TopToolBarArea, this);
         hide();
         update.start(0);
@@ -223,6 +253,9 @@ private:
         {
             const QSignalBlocker blocker(tabs);
             setWindowTitle(text({"Design", "设计"}));
+            workspace->setText(windowTitle());
+            workspace->setAccessibleName(text({"Workspace", "工作台"}));
+            workspace->setToolTip(text({"Switch workspace", "切换工作台"}));
             tabs->setAccessibleName(windowTitle());
             for (int index = 0; index < TabCount; ++index) {
                 tabs->setTabText(index, text(tabLabels[index]));
@@ -241,6 +274,13 @@ private:
             shownLanguage = language;
             shownCommandRevision = revision;
         }
+        // A restored Qt layout may have saved the ribbon beside a legacy toolbar.
+        if (mainWindow.toolBarArea(this) != Qt::TopToolBarArea) {
+            mainWindow.addToolBar(Qt::TopToolBarArea, this);
+        }
+        if (!mainWindow.toolBarBreak(this)) {
+            mainWindow.insertToolBarBreak(this);
+        }
         show();
     }
 
@@ -254,6 +294,7 @@ private:
         auto* action = command->getAction()->action();
         auto* button = new QToolButton(row.parentWidget());
         button->setObjectName(QString::fromLatin1(spec.command));
+        button->setProperty("personalCadRole", "command");
         button->setAutoRaise(true);
         button->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
         button->setIconSize(QSize(24, 24));
@@ -275,7 +316,7 @@ private:
     {
         auto* panel = new QWidget(ribbon.parentWidget());
         auto* column = new QVBoxLayout(panel);
-        column->setContentsMargins(4, 2, 4, 0);
+        column->setContentsMargins(5, 0, 5, 0);
         column->setSpacing(0);
         auto* row = new QHBoxLayout;
         row->setContentsMargins(0, 0, 0, 0);
@@ -306,13 +347,14 @@ private:
 
         if (ribbon.count() > 0) {
             auto* divider = new QFrame(ribbon.parentWidget());
-            divider->setFrameShape(QFrame::VLine);
-            divider->setFrameShadow(QFrame::Plain);
+            divider->setObjectName(QStringLiteral("PersonalCadGroupDivider"));
+            divider->setFixedWidth(1);
             ribbon.addWidget(divider);
         }
         menuButton->setObjectName(QStringLiteral("PersonalCadGroup_%1").arg(QString::fromLatin1(title.en)));
         menuButton->setText(text(title));
         menuButton->setAccessibleName(menuButton->text());
+        menuButton->setProperty("personalCadRole", "group");
         menuButton->setAutoRaise(true);
         menuButton->setMenu(menu);
         menuButton->setPopupMode(QToolButton::InstantPopup);
@@ -323,8 +365,10 @@ private:
 
     void rebuildGroups(int tab);
 
+    MainWindow& mainWindow;
     Application& app;
     QWidget* host;
+    QToolButton* workspace;
     QTabBar* tabs;
     QScrollArea* scroll;
     QTimer update;
@@ -348,6 +392,7 @@ void DesignToolbar::rebuildGroups(int tab)
         old->deleteLater();
     }
     auto* page = new QWidget;
+    page->setObjectName(QStringLiteral("PersonalCadCommandPage"));
     auto* row = new QHBoxLayout(page);
     row->setContentsMargins(0, 0, 0, 0);
     row->setSpacing(0);

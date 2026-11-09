@@ -45,6 +45,10 @@
 #include "MainWindow.h"
 #include "OverlayWidgets.h"
 #include "WidgetFactory.h"
+#ifdef FREECAD_PERSONAL_CAD
+#include "PersonalCadDesignToolbar.h"
+#include "WorkbenchManager.h"
+#endif
 
 
 using namespace Gui;
@@ -921,6 +925,21 @@ void ToolBarManager::restoreState() const
     statusBarAreaWidget->restoreState(sbToolBars);
     menuBarRightAreaWidget->restoreState(mbRightToolBars);
     menuBarLeftAreaWidget->restoreState(mbLeftToolBars);
+
+#ifdef FREECAD_PERSONAL_CAD
+    if (usesPersonalCadDesignToolbar(WorkbenchManager::instance()->activeName())) {
+        // The window and area layouts may restore visibility from before the
+        // design toolbar existed. Keep the active workbench's toolbar policy.
+        for (auto* toolbar : std::as_const(toolbars)) {
+            auto* toggle = toolbar->toggleViewAction();
+            if (getToolbarPolicy(toolbar) == ToolBarItem::DefaultVisibility::Unavailable
+                || !toggle->isVisible()) {
+                toolbar->hide();
+                toggle->setVisible(false);
+            }
+        }
+    }
+#endif
 }
 
 bool ToolBarManager::addToolBarToArea(QObject* source, QMouseEvent* ev)

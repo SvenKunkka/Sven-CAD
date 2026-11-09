@@ -121,6 +121,32 @@ void StartupProcess::execute()
     registerEventType();
     setThemePaths();
     setupFileDialog();
+
+#ifdef FREECAD_PERSONAL_CAD
+    const auto preferences = App::GetApplication().GetParameterGroupByPath(
+        "User parameter:BaseApp/Preferences"
+    );
+    const auto window = preferences->GetGroup("MainWindow");
+    if (!window->GetBool("PersonalCadLightThemeInitialized", false)) {
+        const auto theme = window->GetASCII("Theme");
+        const auto sheet = window->GetASCII("StyleSheet");
+        const bool stockDark = (theme == "FreeCAD Dark" && (sheet.empty() || sheet == "FreeCAD.qss"))
+            || sheet == "FreeCAD Dark.qss";
+        if (stockDark && window->GetASCII("ThemeStyleParametersFile").empty()) {
+            window->SetASCII("Theme", "FreeCAD Light");
+            window->SetASCII("StyleSheet", "FreeCAD.qss");
+            const auto view = preferences->GetGroup("View");
+            // Replace the stock dark canvas only. Keep saved custom colors and gradients.
+            constexpr unsigned long darkBackground = 1364283903UL;
+            constexpr unsigned long lightBackground = 4160223231UL;
+            if (view->GetUnsigned("BackgroundColor") == darkBackground
+                && !view->GetBool("Gradient", false) && !view->GetBool("RadialGradient", false)) {
+                view->SetUnsigned("BackgroundColor", lightBackground);
+            }
+        }
+        window->SetBool("PersonalCadLightThemeInitialized", true);
+    }
+#endif
 }
 
 void StartupProcess::setLibraryPath()

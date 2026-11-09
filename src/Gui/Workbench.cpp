@@ -460,8 +460,7 @@ bool Workbench::activate()
     if (usesPersonalCadDesignToolbar(name())) {
         for (auto* toolbar : tb->getItems()) {
             const auto& id = toolbar->command();
-            if (id != "File" && id != "Edit" && id != "Workbench"
-                && toolbar->visibilityPolicy == ToolBarItem::DefaultVisibility::Visible) {
+            if (id != "File" && id != "Edit") {
                 toolbar->visibilityPolicy = ToolBarItem::DefaultVisibility::Unavailable;
             }
         }

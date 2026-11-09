@@ -3,10 +3,24 @@
 add_subdirectory(App)
 
 IF (BUILD_GUI)
+    set(Draft_QRC "${CMAKE_CURRENT_SOURCE_DIR}/Resources/Draft.qrc")
+    if(FREECAD_PERSONAL_CAD)
+        set(Draft_Personal_QRC "${CMAKE_CURRENT_BINARY_DIR}/Resources/Draft.qrc")
+        set(Draft_Personal_ResourceTool "${CMAKE_CURRENT_SOURCE_DIR}/prepare_personal_resources.py")
+        set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+            "${Draft_QRC}"
+            "${Draft_Personal_ResourceTool}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/Resources/ui/preferences-dxf.ui")
+        execute_process(
+            COMMAND "${Python3_EXECUTABLE}" "${Draft_Personal_ResourceTool}"
+                "${Draft_QRC}" "${Draft_Personal_QRC}"
+            COMMAND_ERROR_IS_FATAL ANY)
+        set(Draft_QRC "${Draft_Personal_QRC}")
+    endif()
     PYSIDE_WRAP_RC(
         RELATIVE Draft_QRC_SRCS_REL
         ABSOLUTE Draft_QRC_SRCS
-        RESOURCES Resources/Draft.qrc
+        RESOURCES "${Draft_QRC}"
     )
 ENDIF (BUILD_GUI)
 

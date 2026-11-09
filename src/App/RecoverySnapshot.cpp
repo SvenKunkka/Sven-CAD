@@ -19,6 +19,13 @@
  *                                                                            *
  ******************************************************************************/
 
+#ifdef FREECAD_PERSONAL_CAD
+#include <filesystem>
+#include <QSaveFile>
+#include <QTemporaryFile>
+#include <zipios++/zipfile.h>
+#endif
+
 #include <sstream>
 #include <utility>
 
@@ -72,18 +79,30 @@ void writeRecoveryMetadataFile(const App::Document& doc)
     const auto escapedLabel = XMLTools::escapeXml(doc.Label.getValue());
     const auto escapedFileName = XMLTools::escapeXml(doc.FileName.getValue());
 
-    Base::FileInfo fileInfo(fileName);
-    Base::ofstream file(fileInfo, std::ios::out | std::ios::binary);
-    if (!file.is_open()) {
-        throw Base::FileException("Failed to open auto-recovery metadata file", fileInfo);
-    }
-
-    file << "<?xml version='1.0' encoding='utf-8'?>\n"
+    std::ostringstream xml;
+    xml << "<?xml version='1.0' encoding='utf-8'?>\n"
          << "<AutoRecovery SchemaVersion=\"1\">\n"
          << "  <Status>Created</Status>\n"
          << "  <Label>" << escapedLabel << "</Label>\n"
          << "  <FileName>" << escapedFileName << "</FileName>\n"
          << "</AutoRecovery>\n";
+    Base::FileInfo fileInfo(fileName);
+#ifdef FREECAD_PERSONAL_CAD
+    QSaveFile file(QString::fromStdString(fileName));
+    const std::string contents = xml.str();
+    if (!file.open(QIODevice::WriteOnly)
+        || file.write(contents.data(), static_cast<qint64>(contents.size()))
+            != static_cast<qint64>(contents.size())
+        || !file.commit()) {
+        throw Base::FileException("Failed to write auto-recovery metadata", fileInfo);
+    }
+#else
+    Base::ofstream file(fileInfo, std::ios::out | std::ios::binary);
+    if (!file.is_open()) {
+        throw Base::FileException("Failed to open auto-recovery metadata file", fileInfo);
+    }
+    file << xml.str();
+#endif
 }
 
 template<typename WriterT>
@@ -120,25 +139,67 @@ void writeUncompressedRecoverySnapshot(const App::Document& doc, bool saveBinary
     writeRecoverySnapshotContents(doc, writer);
 }
 
-void writeCompressedRecoverySnapshot(const App::Document& doc, bool saveBinaryBrep)
+void writeCompressedRecoveryArchive(
+    const App::Document& doc, bool saveBinaryBrep, const std::string& fileName
+)
 {
-    std::string fileName = doc.TransientDir.getValue();
-    fileName += "/fc_recovery_file.fcstd";
-
     Base::FileInfo fileInfo(fileName);
     Base::ofstream file(fileInfo, std::ios::out | std::ios::binary);
     if (!file.is_open()) {
         throw Base::FileException("Failed to open auto-recovery archive", fileInfo);
     }
 
-    Base::ZipWriter writer(file);
-    if (saveBinaryBrep) {
-        writer.setMode("BinaryBrep");
+    {
+        Base::ZipWriter writer(file);
+        if (saveBinaryBrep) {
+            writer.setMode("BinaryBrep");
+        }
+        writer.setComment("AutoRecovery file");
+        writer.setLevel(1);  // Prefer lower latency over compression ratio for autosave.
+        writeRecoverySnapshotContents(doc, writer);
     }
 
-    writer.setComment("AutoRecovery file");
-    writer.setLevel(1);  // Prefer lower latency over compression ratio for autosave.
-    writeRecoverySnapshotContents(doc, writer);
+#ifdef FREECAD_PERSONAL_CAD
+    file.close();
+    if (!file) {
+        throw Base::FileException("Failed to close auto-recovery archive", fileInfo);
+    }
+#endif
+}
+
+void writeCompressedRecoverySnapshot(const App::Document& doc, bool saveBinaryBrep)
+{
+    std::string fileName = doc.TransientDir.getValue();
+    fileName += "/fc_recovery_file.fcstd";
+
+#ifdef FREECAD_PERSONAL_CAD
+    // Keep the previous snapshot until its replacement is closed and readable.
+    QTemporaryFile temporary(QString::fromStdString(fileName + ".XXXXXX"));
+    if (!temporary.open()) {
+        throw Base::FileException("Failed to create temporary auto-recovery archive", fileName);
+    }
+    const std::string temporaryPath = temporary.fileName().toStdString();
+    temporary.close();
+    writeCompressedRecoveryArchive(doc, saveBinaryBrep, temporaryPath);
+
+    try {
+        zipios::ZipFile archive(temporaryPath);
+        if (!archive.isValid() || !archive.getEntry("Document.xml")) {
+            throw Base::FileException("Temporary auto-recovery archive is incomplete", fileName);
+        }
+    }
+    catch (const std::exception& error) {
+        throw Base::FileException(error.what(), fileName);
+    }
+
+    std::error_code error;
+    std::filesystem::rename(temporaryPath, fileName, error);
+    if (error) {
+        throw Base::FileException("Failed to replace auto-recovery archive: " + error.message(), fileName);
+    }
+#else
+    writeCompressedRecoveryArchive(doc, saveBinaryBrep, fileName);
+#endif
 }
 
 }  // namespace

@@ -256,7 +256,11 @@ void StartupPostProcess::setAutoSaving()
     }
 
     AutoSaver::instance()->setTimeout(timeout * 60000);  // NOLINT
+#ifdef FREECAD_PERSONAL_CAD
+    AutoSaver::instance()->setCompressed(true);
+#else
     AutoSaver::instance()->setCompressed(hDocGrp->GetBool("AutoSaveCompressed", true));
+#endif
 }
 
 void StartupPostProcess::checkQtSvgImageFormatSupport()

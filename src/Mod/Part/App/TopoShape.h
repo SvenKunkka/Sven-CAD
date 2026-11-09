@@ -519,7 +519,9 @@ public:
     void exportBrep(const char* FileName) const;
     void exportBrep(std::ostream&) const;
     void exportBinary(std::ostream&) const;
+#ifndef FREECAD_PERSONAL_CAD
     void exportStl(const char* FileName, double deflection) const;
+#endif
     void exportFaceSet(double, double, const std::vector<Base::Color>&, std::ostream&) const;
     void exportLineSet(std::ostream&) const;
     //@}

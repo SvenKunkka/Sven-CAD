@@ -90,12 +90,14 @@ from draftutils import utils
 from draftutils.utils import pyopen
 from PySide import QtCore, QtGui
 
-try:
-    import Mesh
-
-    mesh_available = True
-except ImportError:
-    mesh_available = False
+personal_cad = FreeCAD.ConfigGet("ExeName") == "PersonalCAD"
+mesh_available = False
+if not personal_cad:
+    try:
+        import Mesh
+        mesh_available = True
+    except ImportError:
+        pass
 
 gui = FreeCAD.GuiUp
 draftui = None
@@ -3540,6 +3542,8 @@ def writeMesh(ob, dxf):
     --------
     dxfLibrary.Drawing, dxfLibrary.PolyLine, Part.Shape.tessellate
     """
+    if personal_cad:
+        raise NotImplementedError("DXF polyface mesh export is disabled in PersonalCAD")
     meshdata = ob.Shape.tessellate(0.5)
     # print(meshdata)
     points = []
@@ -3943,7 +3947,7 @@ def export(objectslist, filename, nospline=False, lwPoly=False):
                         sh.Placement = base_sketch_pla
                         sh.add(ob.Shape.copy())
                         sh.transformShape(base_sketch_pla.inverse().Matrix)
-                    elif params.get_param("dxfmesh"):
+                    elif not personal_cad and params.get_param("dxfmesh"):
                         sh = None
                         if not ob.Shape.isNull():
                             writeMesh(ob, dxf)

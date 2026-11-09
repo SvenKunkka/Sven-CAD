@@ -637,6 +637,11 @@ PyObject* TopoShapePy::loads(PyObject* args)
 
 PyObject* TopoShapePy::exportStl(PyObject* args) const
 {
+#ifdef FREECAD_PERSONAL_CAD
+    Q_UNUSED(args)
+    PyErr_SetString(PyExc_NotImplementedError, "STL export is disabled in PersonalCAD");
+    return nullptr;
+#else
     double deflection = 0.01;
     char* Name;
     if (!PyArg_ParseTuple(args, "et|d", "utf-8", &Name, &deflection)) {
@@ -660,6 +665,7 @@ PyObject* TopoShapePy::exportStl(PyObject* args) const
     }
 
     Py_Return;
+#endif
 }
 
 PyObject* TopoShapePy::extrude(PyObject* args) const
@@ -1929,6 +1935,11 @@ PyObject* TopoShapePy::reflectLines(PyObject* args, PyObject* kwds) const
 
 PyObject* TopoShapePy::makeShapeFromMesh(PyObject* args)
 {
+#ifdef FREECAD_PERSONAL_CAD
+    Q_UNUSED(args)
+    PyErr_SetString(PyExc_NotImplementedError, "Mesh conversion is disabled in PersonalCAD");
+    return nullptr;
+#else
     PyObject* tup;
     double tolerance = 1.0e-06;
     PyObject* sewShape = Py_True;
@@ -1964,6 +1975,7 @@ PyObject* TopoShapePy::makeShapeFromMesh(PyObject* args)
         Py_Return;
     }
     PY_CATCH_OCC
+#endif
 }
 
 PyObject* TopoShapePy::makeEvolved(PyObject* args, PyObject* kwds) const

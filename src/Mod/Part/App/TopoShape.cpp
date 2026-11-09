@@ -132,7 +132,9 @@
 #include <Standard_Version.hxx>
 #include <STEPControl_Reader.hxx>
 #include <STEPControl_Writer.hxx>
+#ifndef FREECAD_PERSONAL_CAD
 #include <StlAPI_Writer.hxx>
+#endif
 #include <TopoDS.hxx>
 #include <TopoDS_Compound.hxx>
 #include <TopoDS_Iterator.hxx>
@@ -862,10 +864,11 @@ void TopoShape::write(const char* FileName) const
         // read brep-file
         exportBrep(File.filePath().c_str());
     }
+#ifndef FREECAD_PERSONAL_CAD
     else if (File.hasExtension("stl")) {
-        // read brep-file
         exportStl(File.filePath().c_str(), 0.01);
     }
+#endif
     else {
         throw Base::FileFormatException(FileName);
     }
@@ -1009,6 +1012,7 @@ void TopoShape::dump(std::ostream& out) const
     BRepTools::Dump(this->_Shape, out);
 }
 
+#ifndef FREECAD_PERSONAL_CAD
 void TopoShape::exportStl(const char* filename, double deflection) const
 {
     StlAPI_Writer writer;
@@ -1023,6 +1027,7 @@ void TopoShape::exportStl(const char* filename, double deflection) const
     writer.Write(this->_Shape, encodeFilename(filename).c_str());
 }
 
+#endif
 void TopoShape::exportFaceSet(
     double dev,
     double ca,

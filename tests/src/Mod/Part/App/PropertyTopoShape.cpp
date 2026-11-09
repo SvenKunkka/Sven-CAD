@@ -3,6 +3,7 @@
 #include <gtest/gtest.h>
 
 #include <BRepFilletAPI_MakeFillet.hxx>
+#include <Base/Reader.h>
 #include "Mod/Part/App/FeaturePartCommon.h"
 #include "Mod/Part/App/PropertyTopoShape.h"
 #include <src/App/InitApplication.h>

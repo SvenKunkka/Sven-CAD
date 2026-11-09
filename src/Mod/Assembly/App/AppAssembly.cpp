@@ -43,7 +43,9 @@ PyMOD_INIT_FUNC(AssemblyApp)
     // load dependent module
     try {
         Base::Interpreter().runString("import Part");
+#ifndef FREECAD_PERSONAL_CAD
         Base::Interpreter().runString("import Spreadsheet");
+#endif
     }
     catch (const Base::Exception& e) {
         PyErr_SetString(PyExc_ImportError, e.what());

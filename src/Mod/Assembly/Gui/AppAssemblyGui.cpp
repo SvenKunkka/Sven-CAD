@@ -42,7 +42,11 @@ PyMOD_INIT_FUNC(AssemblyGui)
 {
     // load dependent module
     try {
+#ifdef FREECAD_PERSONAL_CAD
+        Base::Interpreter().runString("import AssemblyApp");
+#else
         Base::Interpreter().runString("import SpreadsheetGui");
+#endif
     }
     catch (const Base::Exception& e) {
         PyErr_SetString(PyExc_ImportError, e.what());

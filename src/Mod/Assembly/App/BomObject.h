@@ -24,12 +24,14 @@
 
 #pragma once
 
-#include <App/PropertyFile.h>
-
 #include <Mod/Assembly/AssemblyGlobal.h>
 
+#ifdef FREECAD_PERSONAL_CAD
+#include <App/DocumentObject.h>
+#include <App/PropertyStandard.h>
+#else
 #include <Mod/Spreadsheet/App/Sheet.h>
-#include <App/PropertyLinks.h>
+#endif
 
 namespace App
 {
@@ -41,6 +43,7 @@ namespace Assembly
 
 class AssemblyObject;
 
+#ifndef FREECAD_PERSONAL_CAD
 class BomDataElement
 {
 public:
@@ -56,8 +59,13 @@ public:
     std::string columnName;
     std::string value;
 };
+#endif
 
+#ifdef FREECAD_PERSONAL_CAD
+class AssemblyExport BomObject: public App::DocumentObject
+#else
 class AssemblyExport BomObject: public Spreadsheet::Sheet
+#endif
 {
     PROPERTY_HEADER_WITH_OVERRIDE(Assembly::BomObject);
 
@@ -65,7 +73,9 @@ public:
     BomObject();
     ~BomObject() override;
 
+#ifndef FREECAD_PERSONAL_CAD
     PyObject* getPyObject() override;
+#endif
 
     const char* getViewProviderName() const override
     {
@@ -77,7 +87,6 @@ public:
     void generateBOM();
     void addObjectToBom(App::DocumentObject* obj, size_t row, std::string index, bool isMirrored = false);
     void addObjectChildrenToBom(std::vector<App::DocumentObject*> objs, size_t& row, std::string index);
-    void saveCustomColumnData();
     bool isObjMirrored(App::DocumentObject* obj);
 
     AssemblyObject* getAssembly() const;
@@ -91,13 +100,20 @@ public:
     App::PropertyBool detailParts;
     App::PropertyBool onlyParts;
 
-    std::vector<BomDataElement> dataElements;
     std::vector<App::DocumentObject*> obj_list;
     std::vector<bool> obj_mirrored_list;
 
 private:
+    void setText(size_t row, size_t col, const std::string& value, bool forceText = false);
     std::string getBomPropertyValue(App::DocumentObject* obj, const std::string& baseName);
 
+#ifdef FREECAD_PERSONAL_CAD
+    App::PropertyStringList BomRows;
+    std::vector<std::string> tableEntries;
+#else
+    void saveCustomColumnData();
+    std::vector<BomDataElement> dataElements;
+#endif
     std::string mirroredSuffix;
 };
 

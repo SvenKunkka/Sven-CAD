@@ -27,6 +27,8 @@ import os
 import tempfile
 import unittest
 
+from AssemblyApp import hasStaticBom
+
 import UtilsAssembly
 import JointObject
 
@@ -89,6 +91,37 @@ class AssemblyTestBase(unittest.TestCase):
 
 
 class TestCore(AssemblyTestBase):
+    @unittest.skipUnless(hasStaticBom, "Personal static BOM only")
+    def test_static_bom_quantities_survive_save_and_reopen(self):
+        source = self.doc.addObject("Part::Box", "BomSource")
+        source.Label2 = "Example component"
+        self.doc.addObject("Part::Box", "UnrelatedPart")
+        for name in ("OccurrenceA", "OccurrenceB"):
+            link = self.assembly.newObject("App::Link", name)
+            link.LinkedObject = source
+
+        bom_group = UtilsAssembly.getBomGroup(self.assembly)
+        bom = bom_group.newObject("Assembly::BomObject", "BillOfMaterials")
+        bom.columnsNames = ["Index", "Name", "Quantity", "Description"]
+        self.doc.recompute()
+        self.assertTrue(bom.recompute())
+        expected = ["1", source.Label, "2", source.Label2]
+        self.assertEqual(list(bom.BomRows), expected)
+        self.assertNotIn("cells", bom.PropertiesList)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = os.path.join(temp_dir, "StaticBom.FCStd")
+            self.doc.saveCopy(path)
+            reopened = App.openDocument(path)
+            try:
+                restored = reopened.getObject(bom.Name)
+                self.assertEqual(restored.TypeId, "Assembly::BomObject")
+                self.assertEqual(list(restored.BomRows), expected)
+                self.assertTrue(restored.recompute())
+                self.assertEqual(list(restored.BomRows), expected)
+            finally:
+                App.closeDocument(reopened.Name)
+
     def test_component_count_for_link_array(self):
         source = self.doc.addObject("Part::Box", "ArraySource")
         array = self.assembly.newObject("App::Link", "Array")

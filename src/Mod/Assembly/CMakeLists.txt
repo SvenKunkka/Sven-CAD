@@ -38,7 +38,9 @@ set(Assembly_Scripts
     UtilsAssembly.py
 )
 
-if(NOT FREECAD_PERSONAL_CAD)
+if(FREECAD_PERSONAL_CAD)
+    list(APPEND Assembly_Scripts StaticBom.py)
+else()
     list(APPEND Assembly_Scripts CommandCreateSimulation.py)
 endif()
 

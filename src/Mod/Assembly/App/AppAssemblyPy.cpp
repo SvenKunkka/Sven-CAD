@@ -36,11 +36,12 @@ public:
     {
         initialize("This module is the Assembly module.");  // register with Python
 #ifdef FREECAD_PERSONAL_CAD
-        constexpr bool hasMotionSimulation = false;
+        constexpr bool isPersonalBuild = true;
 #else
-        constexpr bool hasMotionSimulation = true;
+        constexpr bool isPersonalBuild = false;
 #endif
-        moduleDictionary().setItem("hasMotionSimulation", Py::Boolean(hasMotionSimulation));
+        moduleDictionary().setItem("hasMotionSimulation", Py::Boolean(!isPersonalBuild));
+        moduleDictionary().setItem("hasStaticBom", Py::Boolean(isPersonalBuild));
     }
 };
 

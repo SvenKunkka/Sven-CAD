@@ -3,7 +3,6 @@
 set(Assembly_LIBS
     Part
     PartDesign
-    Spreadsheet
     FreeCADApp
     OndselSolver
 )
@@ -37,11 +36,12 @@ if(FREECAD_PERSONAL_CAD)
         DEPENDS "${AssemblyObjectBindingsHeader}" "${AssemblyObjectBindingsSource}"
     )
 else()
+    list(APPEND Assembly_LIBS Spreadsheet)
     generate_from_py(AssemblyObject)
+    generate_from_py(BomObject)
     generate_from_py(SimulationGroup)
 endif()
 generate_from_py(AssemblyLink)
-generate_from_py(BomObject)
 generate_from_py(BomGroup)
 generate_from_py(JointGroup)
 generate_from_py(ViewGroup)
@@ -53,8 +53,6 @@ SET(Python_SRCS
     AssemblyObjectPyImp.cpp
     AssemblyLink.pyi
     AssemblyLinkPyImp.cpp
-    BomObject.pyi
-    BomObjectPyImp.cpp
     BomGroup.pyi
     BomGroupPyImp.cpp
     JointGroup.pyi
@@ -65,7 +63,7 @@ SET(Python_SRCS
     SnapshotGroupPyImp.cpp
 )
 if(NOT FREECAD_PERSONAL_CAD)
-    list(APPEND Python_SRCS SimulationGroup.pyi SimulationGroupPyImp.cpp)
+    list(APPEND Python_SRCS BomObject.pyi BomObjectPyImp.cpp SimulationGroup.pyi SimulationGroupPyImp.cpp)
 endif()
 SOURCE_GROUP("Python" FILES ${Python_SRCS})
 

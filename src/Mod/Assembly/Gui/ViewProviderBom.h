@@ -25,13 +25,21 @@
 
 #include <Mod/Assembly/AssemblyGlobal.h>
 
+#ifdef FREECAD_PERSONAL_CAD
+#include <Gui/ViewProviderDocumentObject.h>
+#else
 #include <Mod/Spreadsheet/Gui/ViewProviderSpreadsheet.h>
+#endif
 
 
 namespace AssemblyGui
 {
 
+#ifdef FREECAD_PERSONAL_CAD
+class AssemblyGuiExport ViewProviderBom: public Gui::ViewProviderDocumentObject
+#else
 class AssemblyGuiExport ViewProviderBom: public SpreadsheetGui::ViewProviderSheet
+#endif
 {
     PROPERTY_HEADER_WITH_OVERRIDE(AssemblyGui::ViewProviderBom);
 

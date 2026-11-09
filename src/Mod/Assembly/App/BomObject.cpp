@@ -30,7 +30,7 @@
 #include <App/FeaturePythonPyImp.h>
 #include <App/Link.h>
 #include <App/PropertyPythonObject.h>
-#include <App/Range.h>
+#include <App/PropertyUnits.h>
 #include <Base/Console.h>
 #include <Base/Parameter.h>
 #include <Base/Placement.h>
@@ -41,22 +41,30 @@
 
 #include <Mod/Part/App/PartFeature.h>
 #include <Mod/PartDesign/App/Body.h>
-#include <Mod/Spreadsheet/App/Cell.h>
 
 #include "AssemblyObject.h"
 #include "AssemblyLink.h"
 #include "BomObject.h"
+#include "Groups.h"
+
+#ifndef FREECAD_PERSONAL_CAD
+#include <App/Range.h>
+#include <Mod/Spreadsheet/App/Cell.h>
 #include "BomObjectPy.h"
+#endif
 
 
 using namespace Assembly;
 
 // ================================ Assembly Object ============================
 
+#ifdef FREECAD_PERSONAL_CAD
+PROPERTY_SOURCE(Assembly::BomObject, App::DocumentObject)
+#else
 PROPERTY_SOURCE(Assembly::BomObject, Spreadsheet::Sheet)
+#endif
 
 BomObject::BomObject()
-    : Spreadsheet::Sheet()
 {
     ADD_PROPERTY_TYPE(
         columnsNames,
@@ -89,9 +97,19 @@ BomObject::BomObject()
         (App::PropertyType)(App::Prop_None),
         "Only Part containers will be added. Solids like PartDesign Bodies will be ignored."
     );
+#ifdef FREECAD_PERSONAL_CAD
+    ADD_PROPERTY_TYPE(
+        BomRows,
+        (),
+        "Bom",
+        (App::PropertyType)(App::Prop_ReadOnly | App::Prop_Hidden | App::Prop_Output),
+        "Computed BOM rows, in column order."
+    );
+#endif
 }
 BomObject::~BomObject() = default;
 
+#ifndef FREECAD_PERSONAL_CAD
 PyObject* BomObject::getPyObject()
 {
     if (PythonObject.is(Py::_None())) {
@@ -100,14 +118,20 @@ PyObject* BomObject::getPyObject()
     }
     return Py::new_reference_to(PythonObject);
 }
+#endif
 
 App::DocumentObjectExecReturn* BomObject::execute()
 {
     generateBOM();
 
+#ifdef FREECAD_PERSONAL_CAD
+    return App::DocumentObject::execute();
+#else
     return Spreadsheet::Sheet::execute();
+#endif
 }
 
+#ifndef FREECAD_PERSONAL_CAD
 void BomObject::saveCustomColumnData()
 {
     // This function saves data that is not automatically generated.
@@ -139,28 +163,33 @@ void BomObject::saveCustomColumnData()
         }
     }
 }
+#endif
 
 void BomObject::generateBOM()
 {
+#ifdef FREECAD_PERSONAL_CAD
+    tableEntries.clear();
+#else
     saveCustomColumnData();
     clearAll();
+#endif
     obj_list.clear();
     obj_mirrored_list.clear();
-    size_t row = 0;
-    size_t col = 0;
 
     auto hGrp = App::GetApplication().GetParameterGroupByPath(
         "User parameter:BaseApp/Preferences/Mod/Assembly"
     );
     mirroredSuffix = hGrp->GetASCII("BomMirroredSuffix", " (mirrored)");
 
-    // Populate headers
+#ifndef FREECAD_PERSONAL_CAD
+    size_t col = 0;
     for (auto& columnName : columnsNames.getValues()) {
-        setCell(App::CellAddress(row, col), columnName.c_str());
+        setText(0, col, columnName);
         ++col;
     }
-    ++row;
+#endif
 
+    size_t row = 1;
     auto* assembly = getAssembly();
     if (assembly) {
         addObjectChildrenToBom(assembly->getOutList(), row, "");
@@ -168,6 +197,12 @@ void BomObject::generateBOM()
     else {
         addObjectChildrenToBom(getDocument()->getRootObjectsIgnoreLinks(), row, "");
     }
+#ifdef FREECAD_PERSONAL_CAD
+    if (BomRows.getValues() != tableEntries) {
+        BomRows.setValues(tableEntries);
+    }
+    tableEntries.clear();
+#endif
 }
 
 void BomObject::addObjectChildrenToBom(
@@ -179,7 +214,7 @@ void BomObject::addObjectChildrenToBom(
     int quantityColIndex = getColumnIndex("Quantity");
     bool hasQuantityCol = hasQuantityColumn();
 
-    size_t siblingsInitialRow = row;
+    std::vector<size_t> siblingRows;
 
     if (index != "") {
         index = index + ".";
@@ -212,21 +247,21 @@ void BomObject::addObjectChildrenToBom(
             continue;
         }
 
-        if (hasQuantityCol && row != siblingsInitialRow) {
+        if (hasQuantityCol) {
             // Check if the object is not already in (case of links). And if so just increment.
             // Note: an object can be used in several parts. In which case we do no want to blindly
             // increment.
             // We also check if the Mirror state matches. Mirrored parts should not group with
             // non-mirrored parts.
             bool found = false;
-            for (size_t i = siblingsInitialRow; i <= row; ++i) {
+            for (size_t i : siblingRows) {
                 size_t idInList = i - 1;  // -1 for the header
                 if (idInList < obj_list.size() && child == obj_list[idInList]
                     && idInList < obj_mirrored_list.size()
                     && isMirrored == obj_mirrored_list[idInList]) {
 
                     int qty = std::stoi(getText(i, quantityColIndex)) + 1;
-                    setCell(App::CellAddress(i, quantityColIndex), std::to_string(qty).c_str());
+                    setText(i, quantityColIndex, std::to_string(qty));
                     found = true;
                     break;
                 }
@@ -240,6 +275,7 @@ void BomObject::addObjectChildrenToBom(
         ++sub_i;
 
         addObjectToBom(child, row, sub_index, isMirrored);
+        siblingRows.push_back(row);
         ++row;
 
         if ((child->isDerivedFrom<AssemblyObject>() && detailSubAssemblies.getValue())
@@ -256,14 +292,14 @@ bool BomObject::isObjMirrored(App::DocumentObject* obj)
     // We multiply scales to handle nested mirroring (e.g., Mirrored LinkElement inside Mirrored
     // LinkGroup = Normal).
     double accumulatedScale = 1.0;
-    if (auto element = static_cast<App::LinkElement*>(obj)) {
+    if (auto element = freecad_cast<App::LinkElement*>(obj)) {
         accumulatedScale *= element->Scale.getValue();
 
         if (auto group = element->getLinkGroup()) {
             accumulatedScale *= group->Scale.getValue();
         }
     }
-    else if (auto link = static_cast<App::Link*>(obj)) {
+    else if (auto link = freecad_cast<App::Link*>(obj)) {
         accumulatedScale *= link->Scale.getValue();
     }
     return accumulatedScale < 0.0;
@@ -273,10 +309,13 @@ void BomObject::addObjectToBom(App::DocumentObject* obj, size_t row, std::string
 {
     obj_list.push_back(obj);
     obj_mirrored_list.push_back(isMirrored);
+#ifdef FREECAD_PERSONAL_CAD
+    tableEntries.resize(row * columnsNames.getValues().size());
+#endif
     size_t col = 0;
     for (auto& columnName : columnsNames.getValues()) {
         if (columnName == "Index") {
-            setCell(App::CellAddress(row, col), (std::string("'") + index).c_str());
+            setText(row, col, index, true);
         }
         else if (columnName == "Name") {
             std::string name = obj->Label.getValue();
@@ -289,13 +328,13 @@ void BomObject::addObjectToBom(App::DocumentObject* obj, size_t row, std::string
                     }
                 }
             }
-            setCell(App::CellAddress(row, col), name.c_str());
+            setText(row, col, name);
         }
         else if (columnName == "File Name") {
-            setCell(App::CellAddress(row, col), obj->getDocument()->getFileName());
+            setText(row, col, obj->getDocument()->getFileName());
         }
         else if (columnName == "Quantity") {
-            setCell(App::CellAddress(row, col), std::to_string(1).c_str());
+            setText(row, col, "1");
         }
         else if (columnName.starts_with(".")) {
             // Column names that start with a dot are considered property names
@@ -304,18 +343,24 @@ void BomObject::addObjectToBom(App::DocumentObject* obj, size_t row, std::string
 
             auto propertyValue = getBomPropertyValue(obj, baseName);
             if (!propertyValue.empty()) {
-                setCell(App::CellAddress(row, col), propertyValue.c_str());
+                setText(row, col, propertyValue);
             }
         }
+#ifdef FREECAD_PERSONAL_CAD
+        else if (columnName == "Description") {
+            setText(row, col, obj->Label2.getValue());
+        }
+#else
         else {
             // load custom data if any.
             for (auto& el : dataElements) {
                 if (el.objName == obj->Label.getValue() && el.columnName == columnName) {
-                    setCell(App::CellAddress(row, col), el.value.c_str());
+                    setText(row, col, el.value);
                     break;
                 }
             }
         }
+#endif
         ++col;
     }
 }
@@ -359,6 +404,15 @@ AssemblyObject* BomObject::getAssembly() const
         if (obj->isDerivedFrom<AssemblyObject>()) {
             return static_cast<AssemblyObject*>(obj);
         }
+#ifdef FREECAD_PERSONAL_CAD
+        if (obj->isDerivedFrom<BomGroup>()) {
+            for (auto* parent : obj->getInList()) {
+                if (auto* assembly = freecad_cast<AssemblyObject*>(parent)) {
+                    return assembly;
+                }
+            }
+        }
+#endif
     }
     return nullptr;
 }
@@ -375,6 +429,18 @@ bool BomObject::hasQuantityColumn() const
 
 std::string Assembly::BomObject::getText(size_t row, size_t col) const
 {
+#ifdef FREECAD_PERSONAL_CAD
+    const auto& columns = columnsNames.getValues();
+    if (col >= columns.size()) {
+        return {};
+    }
+    if (row == 0) {
+        return columns[col];
+    }
+    const auto& entries = tableEntries.empty() ? BomRows.getValues() : tableEntries;
+    const size_t index = (row - 1) * columns.size() + col;
+    return index < entries.size() ? entries[index] : std::string {};
+#else
     const Spreadsheet::Cell* cell = getCell(App::CellAddress(row, col));
     std::string cellName;
     if (cell) {
@@ -387,6 +453,16 @@ std::string Assembly::BomObject::getText(size_t row, size_t col) const
     }
 
     return cellName;
+#endif
+}
+
+void BomObject::setText(size_t row, size_t col, const std::string& value, [[maybe_unused]] bool forceText)
+{
+#ifdef FREECAD_PERSONAL_CAD
+    tableEntries.at((row - 1) * columnsNames.getValues().size() + col) = value;
+#else
+    setCell(App::CellAddress(row, col), forceText ? ("'" + value).c_str() : value.c_str());
+#endif
 }
 
 int BomObject::getColumnIndex(std::string name) const

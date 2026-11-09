@@ -24,6 +24,7 @@
 import re
 import os
 import FreeCAD as App
+from AssemblyApp import hasStaticBom
 
 from PySide.QtCore import QT_TRANSLATE_NOOP
 
@@ -35,6 +36,9 @@ if App.GuiUp:
 import UtilsAssembly
 import Preferences
 from functools import partial
+
+if hasStaticBom:
+    import StaticBom
 
 __title__ = "Assembly Command Create Bill of Materials"
 __author__ = "Ondsel"
@@ -64,16 +68,22 @@ class CommandCreateBom:
         pass
 
     def GetResources(self):
+        tooltip = QT_TRANSLATE_NOOP(
+            "Assembly_CreateBom",
+            "<p>Creates a bill of materials of the current assembly. If an assembly is active, it will be a BOM of this assembly. Else it will be a BOM of the whole document.</p>"
+            "<p>The BOM object is a document object that stores the settings of your BOM. It is also a spreadsheet object so you can easily visualize the BOM. If you do not need the BOM object to be saved as a document object, you can simply export and cancel the task.</p>"
+            "<p>The columns 'Index', 'Name', 'File Name' and 'Quantity' are automatically generated on recompute. The 'Description' and custom columns are not overwritten.</p>",
+        )
+        if hasStaticBom:
+            tooltip = QT_TRANSLATE_NOOP(
+                "Assembly_CreateBom",
+                "Creates a read-only bill of materials for the active assembly or the current document. The bill of materials can be saved with the document or exported to CSV.",
+            )
         return {
             "Pixmap": "Assembly_BillOfMaterials",
             "MenuText": QT_TRANSLATE_NOOP("Assembly_CreateBom", "Bill of Materials"),
             "Accel": "O",
-            "ToolTip": QT_TRANSLATE_NOOP(
-                "Assembly_CreateBom",
-                "<p>Creates a bill of materials of the current assembly. If an assembly is active, it will be a BOM of this assembly. Else it will be a BOM of the whole document.</p>"
-                "<p>The BOM object is a document object that stores the settings of your BOM. It is also a spreadsheet object so you can easily visualize the BOM. If you do not need the BOM object to be saved as a document object, you can simply export and cancel the task.</p>"
-                "<p>The columns 'Index', 'Name', 'File Name' and 'Quantity' are automatically generated on recompute. The 'Description' and custom columns are not overwritten.</p>",
-            ),
+            "ToolTip": tooltip,
             "CmdType": "ForEdit",
         }
 
@@ -154,9 +164,12 @@ class TaskAssemblyCreateBom(QtCore.QObject):
         self.deactivate()
         Gui.ActiveDocument.commitCommand()
 
-        self.bomObj.recompute()
-
-        self.bomObj.ViewObject.showSheetMdi()
+        recomputed = self.bomObj.recompute()
+        if hasStaticBom:
+            if recomputed:
+                StaticBom.showPreview(self.bomObj)
+        else:
+            self.bomObj.ViewObject.showSheetMdi()
 
         return True
 
@@ -328,8 +341,12 @@ class TaskAssemblyCreateBom(QtCore.QObject):
         self.bomObj = Gui.doCommandEval("bomObj")
 
     def export(self):
-        self.bomObj.recompute()
-        self.bomObj.ViewObject.exportAsFile()
+        recomputed = self.bomObj.recompute()
+        if hasStaticBom:
+            if recomputed:
+                StaticBom.exportCsv(self.bomObj, self.form)
+        else:
+            self.bomObj.ViewObject.exportAsFile()
 
     def eventFilter(self, watched, event):
         if self.form is not None and watched == self.form.columnList:
@@ -413,6 +430,14 @@ class TaskAssemblyCreateBom(QtCore.QObject):
             )
             + "\n"
         )
+        if hasStaticBom:
+            columns_text.setText(
+                translate(
+                    "Assembly",
+                    "The index, name, description, file name and quantity are computed from the model. Use a column name such as .Length to show a model property.",
+                )
+            )
+            export_text.setText(translate("Assembly", "Export saves the displayed data as CSV."))
 
         layout_width = (
             help_dialog.contentsRect().width()

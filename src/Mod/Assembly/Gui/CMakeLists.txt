@@ -5,10 +5,11 @@ set(AssemblyGui_LIBS
     Assembly
     PartDesign
     PartGui
-    Spreadsheet
-    SpreadsheetGui
     FreeCADGui
 )
+if(NOT FREECAD_PERSONAL_CAD)
+    list(APPEND AssemblyGui_LIBS Spreadsheet SpreadsheetGui)
+endif()
 
 set (Assembly_TR_QRC ${CMAKE_CURRENT_BINARY_DIR}/Resources/Assembly_translation.qrc)
 qt_find_and_add_translation(QM_SRCS "Resources/translations/*_*.ts"

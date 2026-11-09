@@ -38,7 +38,11 @@
 
 using namespace AssemblyGui;
 
+#ifdef FREECAD_PERSONAL_CAD
+PROPERTY_SOURCE(AssemblyGui::ViewProviderBom, Gui::ViewProviderDocumentObject)
+#else
 PROPERTY_SOURCE(AssemblyGui::ViewProviderBom, SpreadsheetGui::ViewProviderSheet)
+#endif
 
 ViewProviderBom::ViewProviderBom()
 {}

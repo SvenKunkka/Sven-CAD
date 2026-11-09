@@ -28,15 +28,11 @@
 # FreeCAD init script of the Spreadsheet module
 
 
-# Get the Parameter Group of this module
-ParGrp = App.ParamGet("System parameter:Modules").GetGroup("Spreadsheet")
-
-# Set the needed information
-ParGrp.SetString("HelpIndex", "Spreadsheet/Help/index.html")
-ParGrp.SetString("WorkBenchName", "Spreadsheet")
-ParGrp.SetString("WorkBenchModule", "SpreadsheetWorkbench.py")
-
-# add Import/Export types
-App.addImportType("Excel spreadsheet (*.xlsx *.XLSX)", "importXLSX")
+if App.ConfigGet("ExeName") != "PersonalCAD":
+    ParGrp = App.ParamGet("System parameter:Modules").GetGroup("Spreadsheet")
+    ParGrp.SetString("HelpIndex", "Spreadsheet/Help/index.html")
+    ParGrp.SetString("WorkBenchName", "Spreadsheet")
+    ParGrp.SetString("WorkBenchModule", "SpreadsheetWorkbench.py")
+    App.addImportType("Excel spreadsheet (*.xlsx *.XLSX)", "importXLSX")
 
 App.__unit_test__ += ["TestSpreadsheet"]

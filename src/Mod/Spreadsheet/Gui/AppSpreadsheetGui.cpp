@@ -60,8 +60,10 @@ public:
     Module()
         : Py::ExtensionModule<Module>("SpreadsheetGui")
     {
+#ifndef FREECAD_PERSONAL_CAD
         add_varargs_method("open", &Module::open);
         add_varargs_method("insert", &Module::insert);
+#endif
         initialize("This module is the SpreadsheetGui module.");  // register with Python
     }
 
@@ -133,8 +135,10 @@ PyMOD_INIT_FUNC(SpreadsheetGui)
         PyMOD_Return(nullptr);
     }
 
+#ifndef FREECAD_PERSONAL_CAD
     // instantiating the commands
     CreateSpreadsheetCommands();
+#endif
 
 #if defined(Q_OS_WIN32)
     QAccessible::installFactory(SpreadsheetGui::SheetTableViewAccessibleInterface::ifactory);
@@ -142,14 +146,18 @@ PyMOD_INIT_FUNC(SpreadsheetGui)
 
     SpreadsheetGui::ViewProviderSheet::init();
     SpreadsheetGui::ViewProviderSheetPython::init();
+#ifndef FREECAD_PERSONAL_CAD
     SpreadsheetGui::Workbench::init();
+#endif
     SpreadsheetGui::SheetView::init();
     SpreadsheetGui::SheetViewPy::init_type();
 
+#ifndef FREECAD_PERSONAL_CAD
     // register preference page
     new Gui::PrefPageProducer<SpreadsheetGui::DlgSettingsImp>(
         QT_TRANSLATE_NOOP("QObject", "Spreadsheet")
     );
+#endif
 
     // add resources and reloads the translators
     loadSpreadsheetResource();

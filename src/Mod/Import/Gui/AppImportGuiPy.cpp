@@ -62,10 +62,14 @@
 #include <Gui/Document.h>
 #include <Gui/MainWindow.h>
 #include <Gui/ViewProviderLink.h>
+#ifndef FREECAD_PERSONAL_CAD
 #include <Mod/Import/App/ReaderGltf.h>
+#endif
 #include <Mod/Import/App/ReaderIges.h>
 #include <Mod/Import/App/ReaderStep.h>
+#ifndef FREECAD_PERSONAL_CAD
 #include <Mod/Import/App/WriterGltf.h>
+#endif
 #include <Mod/Import/App/WriterIges.h>
 #include <Mod/Import/App/WriterStep.h>
 #include <Mod/Part/App/ImportIges.h>
@@ -226,6 +230,11 @@ private:
 
         try {
             Base::FileInfo file(Utf8Name.c_str());
+#ifdef FREECAD_PERSONAL_CAD
+            if (file.hasExtension({"glb", "gltf"})) {
+                throw Py::Exception(PyExc_IOError, "glTF is disabled in PersonalCAD");
+            }
+#endif
 
             App::Document* pcDoc = nullptr;
             if (DocName) {
@@ -348,6 +357,7 @@ private:
                     pcDoc->recompute();
                 }
             }
+#ifndef FREECAD_PERSONAL_CAD
             else if (file.hasExtension({"glb", "gltf"})) {
                 Handle(Message_ProgressIndicator) pi;
                 if (ocaf.showProgress()) {
@@ -356,6 +366,7 @@ private:
                 Import::ReaderGltf reader(file);
                 reader.read(hDoc, Message_ProgressIndicator::Start(pi));
             }
+#endif
             else {
                 throw Py::Exception(PyExc_IOError, "no supported file format");
             }
@@ -559,6 +570,12 @@ private:
         }
 
         try {
+            Base::FileInfo file(Utf8Name.c_str());
+#ifdef FREECAD_PERSONAL_CAD
+            if (file.hasExtension({"glb", "gltf"})) {
+                throw Py::Exception(PyExc_IOError, "glTF is disabled in PersonalCAD");
+            }
+#endif
             Py::Sequence list(object);
             std::vector<App::DocumentObject*> objs;
             for (Py::Sequence::iterator it = list.begin(); it != list.end(); ++it) {
@@ -587,7 +604,6 @@ private:
                 ocaf.exportObjects(objs);
             }
 
-            Base::FileInfo file(Utf8Name.c_str());
             if (file.hasExtension({"stp", "step"})) {
                 ParameterGrp::handle hGrp = App::GetApplication().GetParameterGroupByPath(
                     "User parameter:BaseApp/Preferences/Mod/Part/STEP"
@@ -605,10 +621,12 @@ private:
                 Import::WriterIges writer(file);
                 writer.write(hDoc);
             }
+#ifndef FREECAD_PERSONAL_CAD
             else if (file.hasExtension({"glb", "gltf"})) {
                 Import::WriterGltf writer(file);
                 writer.write(hDoc);
             }
+#endif
 
             hApp->Close(hDoc);
         }
@@ -631,6 +649,11 @@ private:
 
         try {
             Base::FileInfo file(Name);
+#ifdef FREECAD_PERSONAL_CAD
+            if (file.hasExtension({"glb", "gltf"})) {
+                throw Py::Exception(PyExc_IOError, "glTF is disabled in PersonalCAD");
+            }
+#endif
 
             Handle(XCAFApp_Application) hApp = XCAFApp_Application::GetApplication();
             Handle(TDocStd_Document) hDoc;
@@ -644,10 +667,12 @@ private:
                 Import::ReaderIges reader(file);
                 reader.read(hDoc);
             }
+#ifndef FREECAD_PERSONAL_CAD
             else if (file.hasExtension({"glb", "gltf"})) {
                 Import::ReaderGltf reader(file);
                 reader.read(hDoc);
             }
+#endif
             else {
                 throw Py::Exception(PyExc_IOError, "no supported file format");
             }

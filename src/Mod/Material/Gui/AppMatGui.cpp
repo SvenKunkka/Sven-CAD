@@ -94,6 +94,7 @@ PyMOD_INIT_FUNC(MatGui)
 
     Base::Console().log("Loading GUI of Material module… done\n");
 
+#ifndef FREECAD_PERSONAL_CAD
     MatGui::Workbench ::init();
     auto manip = std::make_shared<MatGui::WorkbenchManipulator>();
     Gui::WorkbenchManipulator::installManipulator(manip);
@@ -113,6 +114,7 @@ PyMOD_INIT_FUNC(MatGui)
 #if defined(BUILD_MATERIAL_EXTERNAL)
     new Gui::PrefPageProducer<MatGui::DlgSettingsExternal>(
         QT_TRANSLATE_NOOP("QObject", "Material"));
+#endif
 #endif
 
     // add resources and reloads the translators

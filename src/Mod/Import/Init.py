@@ -36,8 +36,11 @@ translate = FreeCAD.Qt.translate
 # FreeCAD.addExportType("IGES files (*.iges *.igs)","ImportGui")
 FreeCAD.addImportType("PLMXML files (*.plmxml *.PLMXML)", "PlmXmlParser")
 FreeCAD.addImportType("STEPZ Zip File Type (*.stpZ *.stpz *.STPZ)", "stepZ")
-FreeCAD.addImportType("glTF (*.gltf *.GLTF *.glb *.GLB)", "ImportGui")
+supports_gltf = FreeCAD.ConfigGet("ExeName") != "PersonalCAD"
+if supports_gltf:
+    FreeCAD.addImportType("glTF (*.gltf *.GLTF *.glb *.GLB)", "ImportGui")
 FreeCAD.addTranslatableExportType(
     translate("FileFormat", "STEPZ (Zipped STEP)"), ["stpZ", "stpz"], "stepZ"
 )
-FreeCAD.addExportType("glTF (*.gltf *.glb)", "ImportGui")
+if supports_gltf:
+    FreeCAD.addExportType("glTF (*.gltf *.glb)", "ImportGui")

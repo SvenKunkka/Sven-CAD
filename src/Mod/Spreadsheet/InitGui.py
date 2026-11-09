@@ -48,7 +48,6 @@ class SpreadsheetWorkbench(Workbench):
         return "SpreadsheetGui::Workbench"
 
 
-Gui.addWorkbench(SpreadsheetWorkbench())
-
-# Append the open handler
-FreeCAD.addImportType("Spreadsheet formats (*.csv *.CSV)", "SpreadsheetGui")
+if FreeCAD.ConfigGet("ExeName") != "PersonalCAD":
+    Gui.addWorkbench(SpreadsheetWorkbench())
+    FreeCAD.addImportType("Spreadsheet formats (*.csv *.CSV)", "SpreadsheetGui")

@@ -46,6 +46,7 @@ class MaterialWorkbench(Gui.Workbench):
         return "MatGui::Workbench"
 
 
-Gui.addWorkbench(MaterialWorkbench())
+if App.ConfigGet("ExeName") != "PersonalCAD":
+    Gui.addWorkbench(MaterialWorkbench())
 
 FreeCAD.__unit_test__ += [ "TestMaterialsGui" ]

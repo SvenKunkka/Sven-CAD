@@ -19,8 +19,6 @@ SET(Import_SRCS
     ImportOCAF2.h
     #ImportOCAFAssembly.cpp
     #ImportOCAFAssembly.h
-    ReaderGltf.cpp
-    ReaderGltf.h
     ReaderIges.cpp
     ReaderIges.h
     ReaderStep.cpp
@@ -32,8 +30,6 @@ SET(Import_SRCS
     PreCompiled.h
     Tools.cpp
     Tools.h
-    WriterGltf.cpp
-    WriterGltf.h
     WriterIges.cpp
     WriterIges.h
     WriterStep.cpp
@@ -45,6 +41,15 @@ SET(Import_SRCS
     dxf/dxf.cpp
     dxf/dxf.h
 )
+
+if(NOT FREECAD_PERSONAL_CAD)
+    list(APPEND Import_SRCS
+        ReaderGltf.cpp
+        ReaderGltf.h
+        WriterGltf.cpp
+        WriterGltf.h
+    )
+endif()
 
 generate_from_py(StepShape)
 

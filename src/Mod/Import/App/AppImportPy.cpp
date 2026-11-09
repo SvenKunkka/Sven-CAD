@@ -65,10 +65,14 @@
 #include <Mod/Part/App/encodeFilename.h>
 
 #include "ImportOCAF2.h"
+#ifndef FREECAD_PERSONAL_CAD
 #include "ReaderGltf.h"
+#endif
 #include "ReaderIges.h"
 #include "ReaderStep.h"
+#ifndef FREECAD_PERSONAL_CAD
 #include "WriterGltf.h"
+#endif
 #include "WriterIges.h"
 #include "WriterStep.h"
 
@@ -154,6 +158,11 @@ private:
 
         try {
             Base::FileInfo file(Utf8Name.c_str());
+#ifdef FREECAD_PERSONAL_CAD
+            if (file.hasExtension({"glb", "gltf"})) {
+                throw Py::Exception(PyExc_IOError, "glTF is disabled in PersonalCAD");
+            }
+#endif
 
             App::Document* pcDoc = nullptr;
             if (DocName) {
@@ -193,10 +202,12 @@ private:
                     pcDoc->recompute();
                 }
             }
+#ifndef FREECAD_PERSONAL_CAD
             else if (file.hasExtension({"glb", "gltf"})) {
                 Import::ReaderGltf reader(file);
                 reader.read(hDoc);
             }
+#endif
             else {
                 throw Py::Exception(PyExc_IOError, "no supported file format");
             }
@@ -288,6 +299,12 @@ private:
         // clang-format on
 
         try {
+            Base::FileInfo file(Utf8Name.c_str());
+#ifdef FREECAD_PERSONAL_CAD
+            if (file.hasExtension({"glb", "gltf"})) {
+                throw Py::Exception(PyExc_IOError, "glTF is disabled in PersonalCAD");
+            }
+#endif
             Py::Sequence list(object);
             std::vector<App::DocumentObject*> objs;
             std::map<Part::Feature*, std::vector<Base::Color>> partColor;
@@ -346,7 +363,6 @@ private:
                 ocaf.exportObjects(objs);
             }
 
-            Base::FileInfo file(Utf8Name.c_str());
             if (file.hasExtension({"stp", "step"})) {
                 Import::WriterStep writer(file);
                 writer.write(hDoc);
@@ -355,10 +371,12 @@ private:
                 Import::WriterIges writer(file);
                 writer.write(hDoc);
             }
+#ifndef FREECAD_PERSONAL_CAD
             else if (file.hasExtension({"glb", "gltf"})) {
                 Import::WriterGltf writer(file);
                 writer.write(hDoc);
             }
+#endif
 
             hApp->Close(hDoc);
         }

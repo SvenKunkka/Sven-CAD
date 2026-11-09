@@ -37,7 +37,8 @@ FreeCAD.changeImportModule("IGES format (*.iges *.IGES *.igs *.IGS)", "Part", "I
 FreeCAD.changeExportModule("IGES format (*.iges *.igs)", "Part", "ImportGui")
 FreeCAD.changeImportModule("STEP with colors (*.step *.STEP *.stp *.STP)", "Import", "ImportGui")
 FreeCAD.changeExportModule("STEP with colors (*.step *.stp)", "Import", "ImportGui")
-FreeCAD.changeExportModule("glTF (*.gltf *.glb)", "Import", "ImportGui")
+if FreeCAD.ConfigGet("ExeName") != "PersonalCAD":
+    FreeCAD.changeExportModule("glTF (*.gltf *.glb)", "Import", "ImportGui")
 
 App.__unit_test__ += ["TestImportGui"]
 

@@ -32,6 +32,7 @@
 #include <QCursor>
 #include <QImage>
 #include <QLabel>
+#include <QPointer>
 
 #include <Inventor/SbRotation.h>
 #include <Inventor/SbTime.h>
@@ -61,6 +62,7 @@
 #include "View3DInventorSelection.h"
 #include "Quarter/SoQTQuarterAdaptor.h"
 
+class QOpenGLContext;
 class QOpenGLFramebufferObject;
 class QOpenGLWidget;
 class QSurfaceFormat;
@@ -657,6 +659,7 @@ private:
     /// The returned node is unreferenced; the caller owns it.
     SoSeparator* buildCaptureRoot(const RenderImageOptions& options) const;
     void setCursorRepresentation(int mode);
+    QOpenGLWidget* makeViewportCurrent();
     void aboutToDestroyGLContext();
     void createStandardCursors();
     bool applyCameraState(const SoCamera& camera);
@@ -701,7 +704,9 @@ private:
     SoClipPlane* pcClipPlane;
 
     RenderType renderType;
-    QOpenGLFramebufferObject* framebuffer;
+    std::unique_ptr<QOpenGLFramebufferObject> framebuffer;
+    QPointer<QOpenGLContext> framebufferContext;
+    bool viewportContextErrorReported {false};
     QImage glImage;
     bool shading;
     SoSwitch* dimensionRoot;

@@ -92,6 +92,7 @@
 #include "InputHintPy.h"
 #include "LinkViewPy.h"
 #include "MainWindow.h"
+#include "NotificationBox.h"
 #include "Macro.h"
 #include "FreeCADGuiModulePy.h"
 #include "PreferencePackManager.h"
@@ -2723,6 +2724,7 @@ void Application::shutdown()
     d->isClosing = true;
     App::GetApplication().closeAllDocuments();
     QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    NotificationBox::shutdown();
 }
 
 void Application::init3DMouse(MainWindow* mainWindow, QApplication* qtApp)

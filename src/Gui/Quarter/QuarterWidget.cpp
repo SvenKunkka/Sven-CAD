@@ -59,11 +59,14 @@
 #include <QFile>
 #include <QGuiApplication>
 #include <QMetaObject>
+#include <QOpenGLContext>
 #include <QOpenGLDebugLogger>
 #include <QOpenGLDebugMessage>
 #include <QOpenGLFunctions>
 #include <QOpenGLWidget>
 #include <QPaintEvent>
+#include <QPointer>
+#include <QScopeGuard>
 #include <QResizeEvent>
 #include <QWindow>
 
@@ -847,59 +850,58 @@ void QuarterWidget::paintEvent(QPaintEvent* event)
         PRIVATE(this)->soeventmanager->setViewportRegion(vp);
     }
 
-    if(!initialized) {
-        this->getSoRenderManager()->reinitialize();
-        initialized = true;
-    }
-
-    getSoRenderManager()->activate();
-
-    QOpenGLWidget* w = static_cast<QOpenGLWidget*>(this->viewport());
-    if (!w->isValid()) {
-        qWarning() << "No valid GL context found!";
+    const QPointer<QuarterWidget> owner(this);
+    const QPointer<QOpenGLWidget> widget(qobject_cast<QOpenGLWidget*>(viewport()));
+    auto activateContext = [&widget]() {
+        if (!widget || !widget->isValid()) {
+            return false;
+        }
+        widget->makeCurrent();
+        return QOpenGLContext::currentContext() == widget->context();
+    };
+    if (!activateContext()) {
+        qWarning() << "3D view skipped a frame because its OpenGL context is unavailable.";
         return;
     }
-    //assert(w->isValid() && "No valid GL context found!");
-    // We might have to process the delay queue here since we don't know
-    // if paintGL() is called from Qt, and we might have some sensors
-    // waiting to trigger (the redraw sensor has a lower priority than a
-    // normal field sensor to guarantee that your sensor is processed
-    // before the next redraw). Disable autorendering while we do this
-    // to avoid recursive redraws.
 
-    // We set the PRIVATE(this)->processdelayqueue = false in redraw()
-    // to avoid processing the delay queue when paintGL() is triggered
-    // by us, and we don't want to process the delay queue in those
-    // cases
+    if (!initialized) {
+        getSoRenderManager()->reinitialize();
+        initialized = true;
+    }
+    getSoRenderManager()->activate();
 
+    // Coin's delay queue can trigger another view and change the current context.
+    // Keep redraw suspended until we have finished using this view's context.
     PRIVATE(this)->autoredrawenabled = false;
-
-    if(PRIVATE(this)->processdelayqueue && SoDB::getSensorManager()->isDelaySensorPending()) {
-        // processing the sensors might trigger a redraw in another
-        // context. Release this context temporarily
-        w->doneCurrent();
+    const auto restoreRedraw = qScopeGuard([owner]() {
+        if (owner) {
+            PRIVATE(owner)->autoredrawenabled = true;
+        }
+    });
+    if (PRIVATE(this)->processdelayqueue && SoDB::getSensorManager()->isDelaySensorPending()) {
+        widget->doneCurrent();
         SoDB::getSensorManager()->processDelayQueue(false);
-        w->makeCurrent();
+        if (!owner || !activateContext()) {
+            return;
+        }
     }
 
-    assert(w->isValid() && "No valid GL context found!");
-
-    // Causes an OpenGL error on resize
-    //glDrawBuffer(w->format().swapBehavior() == QSurfaceFormat::DoubleBuffer ? GL_BACK : GL_FRONT);
-
-    w->makeCurrent();
     PRIVATE(this)->timesincelastframe.restart();
     this->actualRedraw();
+    if (!owner || !widget || !widget->isValid()
+        || QOpenGLContext::currentContext() != widget->context()) {
+        return;
+    }
 
-    QOpenGLFunctions* functions = w->context() ? w->context()->functions() : nullptr;
+    const QPointer<QOpenGLContext> context(widget->context());
+    QOpenGLFunctions* functions = context->functions();
     const bool multisampleEnabled = functions && functions->glIsEnabled(GL_MULTISAMPLE) == GL_TRUE;
 
-    //start the standard graphics view processing for all widgets and graphic items. As 
-    //QGraphicsView initaliizes a QPainter which changes the Opengl context in an unpredictable 
-    //manner we need to store the context and recreate it after Qt is done.
+    // QGraphicsView may temporarily bind another OpenGL context while painting.
     inherited::paintEvent(event);
-    w->makeCurrent();
-
+    if (!owner || !activateContext() || !context || context != widget->context()) {
+        return;
+    }
     if (functions) {
         if (multisampleEnabled) {
             functions->glEnable(GL_MULTISAMPLE);
@@ -908,12 +910,6 @@ void QuarterWidget::paintEvent(QPaintEvent* event)
             functions->glDisable(GL_MULTISAMPLE);
         }
     }
-
-    // Causes an OpenGL error on resize
-    //if (w->format().swapBehavior() == QSurfaceFormat::DoubleBuffer)
-    //    w->context()->swapBuffers(w->context()->surface());
-
-    PRIVATE(this)->autoredrawenabled = true;
 
     // process the delay queue the next time we enter this function,
     // unless we get here after a call to redraw().

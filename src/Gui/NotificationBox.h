@@ -97,6 +97,8 @@ public:
     {
         showText(QPoint(), QString());
     }
+    /// Destroy the top-level notification while QApplication is still alive.
+    static void shutdown();
     /// Returns whether a notification is being shown or not.
     static bool isVisible();
     /// Returns the text of the notification.

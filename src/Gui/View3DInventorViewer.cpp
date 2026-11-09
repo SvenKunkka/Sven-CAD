@@ -99,6 +99,7 @@
 #include <QKeyEvent>
 #include <QMessageBox>
 #include <QMimeData>
+#include <QOpenGLContext>
 #include <QOpenGLFramebufferObject>
 #include <QOpenGLWidget>
 #include <QScopeGuard>
@@ -1433,12 +1434,32 @@ void View3DInventorViewer::createStandardCursors()
     this->zoomCursor = QCursor(zoomPixmap, 8, 8);
 }
 
+QOpenGLWidget* View3DInventorViewer::makeViewportCurrent()
+{
+    auto* widget = qobject_cast<QOpenGLWidget*>(viewport());
+    if (widget && widget->isValid()) {
+        widget->makeCurrent();
+        if (QOpenGLContext::currentContext() == widget->context()) {
+            viewportContextErrorReported = false;
+            return widget;
+        }
+    }
+
+    if (!viewportContextErrorReported) {
+        Base::Console().warning("3D view skipped rendering because its OpenGL context is unavailable.\n");
+        viewportContextErrorReported = true;
+    }
+    return nullptr;
+}
+
 void View3DInventorViewer::aboutToDestroyGLContext()
 {
+    if (framebuffer || naviCube) {
+        makeViewportCurrent();
+    }
+    framebuffer.reset();
+    framebufferContext.clear();
     if (naviCube) {
-        if (auto gl = qobject_cast<QOpenGLWidget*>(this->viewport())) {
-            gl->makeCurrent();
-        }
         if (naviCubeAnnotation) {
             naviCubeAnnotation->removeAllChildren();
         }
@@ -2962,64 +2983,62 @@ GLenum View3DInventorViewer::getInternalTextureFormat()
 
 void View3DInventorViewer::setRenderType(RenderType type)
 {
-    renderType = type;
-
-    glImage = QImage();
+    renderType = Native;
+    glImage = {};
     if (type != Framebuffer) {
-        delete framebuffer;
-        framebuffer = nullptr;
+        framebuffer.reset();
+        framebufferContext.clear();
+    }
+    if (type == Native) {
+        return;
+    }
+    if (type == Image) {
+        // renderOverlayImage() consumes OpenGL-oriented rows.
+        glImage = flipVertically(grabFramebuffer());
+        if (!glImage.isNull()) {
+            renderType = Image;
+        }
+        return;
     }
 
-    switch (type) {
-        case Native:
-            break;
-        case Framebuffer:
-            if (!framebuffer) {
-                const SbViewportRegion vp = this->getSoRenderManager()->getViewportRegion();
-                SbVec2s size = vp.getViewportSizePixels();
-                int width = size[0];
-                int height = size[1];
-
-                auto gl = static_cast<QOpenGLWidget*>(this->viewport());  // NOLINT
-                gl->makeCurrent();
-                QOpenGLFramebufferObjectFormat fboFormat;
-                fboFormat.setSamples(getNumSamples());
-                fboFormat.setAttachment(QOpenGLFramebufferObject::Depth);
-                auto fbo = new QOpenGLFramebufferObject(width, height, fboFormat);
-                if (fbo->format().samples() > 0 && hasFramebufferBlitSupport()) {
-                    if (!renderToFramebuffer(fbo)) {
-                        delete fbo;
-                        break;
-                    }
-                    framebuffer = new QOpenGLFramebufferObject(fbo->size());
-                    // this is needed to be able to render the texture later
-                    QOpenGLFramebufferObject::blitFramebuffer(framebuffer, fbo);
-                    delete fbo;
-                }
-                else {
-                    if (fbo->format().samples() > 0 && !hasFramebufferBlitSupport()) {
-                        Base::Console().warning(
-                            "Framebuffer blit is unavailable; falling back to a single-sample "
-                            "offscreen buffer\n"
-                        );
-                        delete fbo;
-                        QOpenGLFramebufferObjectFormat fallbackFormat;
-                        fallbackFormat.setAttachment(QOpenGLFramebufferObject::Depth);
-                        fbo = new QOpenGLFramebufferObject(width, height, fallbackFormat);
-                    }
-                    if (!renderToFramebuffer(fbo)) {
-                        delete fbo;
-                        break;
-                    }
-                    framebuffer = fbo;
-                }
-            }
-            break;
-        case Image:
-            // renderOverlayImage() consumes OpenGL-oriented rows.
-            glImage = flipVertically(grabFramebuffer());
-            break;
+    auto* widget = makeViewportCurrent();
+    if (!widget) {
+        return;
     }
+    if (framebuffer && framebuffer->isValid() && framebufferContext == widget->context()) {
+        renderType = Framebuffer;
+        return;
+    }
+    framebuffer.reset();
+    framebufferContext.clear();
+
+    const auto size = getSoRenderManager()->getViewportRegion().getViewportSizePixels();
+    if (size[0] <= 0 || size[1] <= 0) {
+        return;
+    }
+
+    const bool canBlit = hasFramebufferBlitSupport();
+    QOpenGLFramebufferObjectFormat format;
+    format.setSamples(canBlit ? getNumSamples() : 0);
+    format.setAttachment(QOpenGLFramebufferObject::Depth);
+    auto captured = std::make_unique<QOpenGLFramebufferObject>(size[0], size[1], format);
+    if (!renderToFramebuffer(captured.get())) {
+        return;
+    }
+
+    if (captured->format().samples() > 0) {
+        auto resolved = std::make_unique<QOpenGLFramebufferObject>(captured->size());
+        if (!resolved->isValid()) {
+            Base::Console().warning("3D view could not create its resolved framebuffer.\n");
+            return;
+        }
+        QOpenGLFramebufferObject::blitFramebuffer(resolved.get(), captured.get());
+        captured = std::move(resolved);
+    }
+
+    framebuffer = std::move(captured);
+    framebufferContext = widget->context();
+    renderType = Framebuffer;
 }
 
 View3DInventorViewer::RenderType View3DInventorViewer::getRenderType() const
@@ -3029,8 +3048,10 @@ View3DInventorViewer::RenderType View3DInventorViewer::getRenderType() const
 
 QImage View3DInventorViewer::grabFramebuffer()
 {
-    auto gl = static_cast<QOpenGLWidget*>(this->viewport());  // NOLINT
-    gl->makeCurrent();
+    auto* gl = makeViewportCurrent();
+    if (!gl) {
+        return {};
+    }
 
     // QOpenGLWidget resolves multisampling and renders the live widget as
     // necessary before reading its framebuffer.
@@ -3053,12 +3074,14 @@ QImage View3DInventorViewer::renderToImage(const RenderImageOptions& options)
     QImage img;
     ScopedRenderIntent scopedIntent(*this, options.intent);
 
-    auto gl = static_cast<QOpenGLWidget*>(this->viewport());  // NOLINT
-    gl->makeCurrent();
+    if (!makeViewportCurrent()) {
+        return {};
+    }
 
-    const QOpenGLContext* context = QOpenGLContext::currentContext();
-    if (!context) {
-        Base::Console().warning("renderToImage failed because no context is active\n");
+    GLint maxSize = 0;
+    glGetIntegerv(GL_MAX_RENDERBUFFER_SIZE, &maxSize);
+    if (width > maxSize || height > maxSize) {
+        Base::Console().warning("renderToImage size exceeds the OpenGL framebuffer limit.\n");
         return {};
     }
 
@@ -3182,8 +3205,10 @@ bool View3DInventorViewer::renderToFramebuffer(
     const RenderImageOptions& options
 )
 {
-    static_cast<QOpenGLWidget*>(this->viewport())->makeCurrent();  // NOLINT
-    if (!fbo->bind()) {
+    if (!makeViewportCurrent()) {
+        return false;
+    }
+    if (!fbo || !fbo->isValid() || !fbo->bind()) {
         Base::Console().warning("renderToFramebuffer failed to bind the framebuffer\n");
         return false;
     }
@@ -3262,11 +3287,20 @@ void View3DInventorViewer::renderFramebuffer()
     SbVec2s size = vp.getViewportSizePixels();
     const int viewportWidth = size[0];
     const int viewportHeight = size[1];
-    if (!this->framebuffer || viewportWidth <= 0 || viewportHeight <= 0) {
+    if (viewportWidth <= 0 || viewportHeight <= 0) {
         return;
     }
 
-    static_cast<QOpenGLWidget*>(this->viewport())->makeCurrent();  // NOLINT
+    auto* widget = makeViewportCurrent();
+    if (!widget) {
+        return;
+    }
+    if (!framebuffer || !framebuffer->isValid() || framebufferContext != widget->context()) {
+        Base::Console().warning("3D view discarded an invalid framebuffer and resumed live rendering.\n");
+        setRenderType(Native);
+        renderScene();
+        return;
+    }
     glViewport(0, 0, viewportWidth, viewportHeight);
 
     if (hasFramebufferBlitSupport()) {
@@ -3274,7 +3308,7 @@ void View3DInventorViewer::renderFramebuffer()
         QOpenGLFramebufferObject::blitFramebuffer(
             nullptr,
             QRect(0, 0, viewportWidth, viewportHeight),
-            this->framebuffer,
+            this->framebuffer.get(),
             QRect(0, 0, srcSize.width(), srcSize.height()),
             GL_COLOR_BUFFER_BIT,
             GL_NEAREST
@@ -3308,7 +3342,9 @@ void View3DInventorViewer::renderGLImage()
         return;
     }
 
-    static_cast<QOpenGLWidget*>(this->viewport())->makeCurrent();  // NOLINT
+    if (!makeViewportCurrent()) {
+        return;
+    }
     glViewport(0, 0, viewportWidth, viewportHeight);
     const QColor col = this->backgroundColor();
     glClearColor(float(col.redF()), float(col.greenF()), float(col.blueF()), 0.0f);

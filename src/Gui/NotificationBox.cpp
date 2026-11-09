@@ -237,7 +237,9 @@ void NotificationLabel::hideNotification()
 void NotificationLabel::hideNotificationImmediately()
 {
     close();  // to trigger QEvent::Close which stops the animation
-    instance = nullptr;
+    if (instance.get() == this) {
+        instance.reset();
+    }
 }
 
 bool NotificationLabel::eventFilter(QObject* o, QEvent* e)
@@ -332,7 +334,7 @@ void NotificationLabel::setHideIfReferenceWidgetDeactivated(bool on)
 
 bool NotificationLabel::notificationLabelChanged(const QString& text)
 {
-    return NotificationLabel::instance->text() != text;
+    return this->text() != text;
 }
 
 /***************************** NotificationBox **********************************/
@@ -411,6 +413,11 @@ bool NotificationBox::showText(
     }
 
     return true;
+}
+
+void NotificationBox::shutdown()
+{
+    delete NotificationLabel::instance.release();
 }
 
 bool NotificationBox::isVisible()

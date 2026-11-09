@@ -5,6 +5,7 @@
 Sven CAD（原 PersonalCAD）基于 FreeCAD 26.3rc2，面向 Apple Silicon Mac 上的参数化机械建模、静态装配和工程出图。默认使用简体中文和毫米，设置、缓存和恢复目录与 FreeCAD 分开。
 
 - 设计工作区默认使用浅色界面。顶部按实体、曲面和装配分组，常用命令带图标和文字。部分建模操作采用与 Fusion 360 相同的默认快捷键。
+- 3D 视口默认采用 Fusion 导航。中键拖动平移，Shift＋中键拖动旋转，滚轮缩放。Mac 触控板支持双指平移、Shift＋双指旋转和双指捏合缩放。双击中键或按 F6 适应窗口。
 - 保留草图约束、零件及曲面建模、静态装配与 BOM、工程图、几何测量、FCStd 和有色 STEP。
 - 移除仿真、CAM、BIM、参数表、材料管理和网格编辑与交换入口。工程图支持 PDF、SVG 和二维 DXF。
 - 针对 macOS 模型树查询、布局恢复、视口错误和自动恢复写入做了加固。遇到依赖已移除模块的旧 FCStd 会报告受影响对象，装配缺失外链时会保护原文件。
@@ -20,6 +21,7 @@ Sven CAD（原 PersonalCAD）基于 FreeCAD 26.3rc2，面向 Apple Silicon Mac �
 Sven CAD (formerly PersonalCAD) is a FreeCAD 26.3rc2 fork for parametric mechanical modeling, static assemblies, and technical drawings on Apple Silicon Macs. It defaults to Simplified Chinese and millimeters, with a separate settings, cache, and recovery profile.
 
 - The design workspace opens in a light theme. The ribbon groups labeled commands under Solid, Surface, and Assembly. Selected modeling commands share their default shortcuts with Fusion 360.
+- The 3D viewport defaults to Fusion navigation. Drag with the middle button to pan, hold Shift to orbit, and scroll to zoom. On a Mac trackpad, swipe with two fingers to pan, add Shift to orbit, and pinch to zoom. Double-click the middle button or press F6 to fit the view.
 - Includes constrained sketches, part and surface modeling, static joints and BOM, drawings, geometric measurement, FCStd, and colored STEP.
 - Removes simulation, CAM, BIM, spreadsheets, material management, and mesh editing and exchange. Drawing outputs include PDF, SVG, and 2D DXF.
 - Hardens macOS model-tree accessibility, layout restore, viewport error handling, and recovery writes. Legacy files that require removed modules report affected objects. A missing assembly link blocks saves to protect the source file.

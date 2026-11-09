@@ -198,6 +198,9 @@ struct OverlayInfo
     std::unordered_map<QDockWidget*, OverlayInfo*>& overlayMap;
     ParameterGrp::handle hGrp;
     fastsignals::scoped_connection conn;
+#ifdef FREECAD_PERSONAL_CAD
+    bool clearingLayout = false;
+#endif
 
     OverlayInfo(
         QWidget* parent,
@@ -221,6 +224,11 @@ struct OverlayInfo
                    ->GetGroup(name);
         conn = App::GetApplication().GetUserParameter().signalParamChanged.connect(
             [this](ParameterGrp* Param, ParameterGrp::ParamType, const char* Name, const char*) {
+#ifdef FREECAD_PERSONAL_CAD
+                if (clearingLayout) {
+                    return;
+                }
+#endif
                 if (hGrp == Param && Name && !tabWidget->isSaving()) {
                     // This will prevent saving settings which will mess up the
                     // just restored ones
@@ -2260,6 +2268,17 @@ void OverlayManager::restore()
         );
     }
 }
+
+#ifdef FREECAD_PERSONAL_CAD
+void OverlayManager::clearSavedLayout()
+{
+    for (auto* overlay : d->_overlayInfos) {
+        // A rejected layout is replaced before the normal startup restore.
+        Base::StateLocker guard(overlay->clearingLayout);
+        overlay->hGrp->Clear();
+    }
+}
+#endif
 
 void OverlayManager::setupTitleBar(QDockWidget* dock)
 {

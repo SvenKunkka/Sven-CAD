@@ -47,6 +47,9 @@ public:
 
     /// restore states
     void restore();
+#ifdef FREECAD_PERSONAL_CAD
+    void clearSavedLayout();
+#endif
     /// save states
     void save();
     /// Retranslate text on language change

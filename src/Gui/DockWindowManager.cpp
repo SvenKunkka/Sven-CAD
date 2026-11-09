@@ -614,6 +614,17 @@ void DockWindowManager::saveState()
     }
 }
 
+#ifdef FREECAD_PERSONAL_CAD
+void DockWindowManager::resetVisibility()
+{
+    for (const auto& item : d->_dockWindowItems.dockWidgets()) {
+        if (auto* dock = findDockWidget(d->_dockedWindows, item.name)) {
+            dock->setVisible(item.visibility);
+        }
+    }
+}
+#endif
+
 void DockWindowManager::loadState()
 {
     ParameterGrp::handle hPref = App::GetApplication()

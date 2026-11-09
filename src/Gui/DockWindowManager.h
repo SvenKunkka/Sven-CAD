@@ -112,6 +112,9 @@ public:
 
     void saveState();
     void loadState();
+#ifdef FREECAD_PERSONAL_CAD
+    void resetVisibility();
+#endif
     void retranslate();
 
     bool isOverlayActivated() const;

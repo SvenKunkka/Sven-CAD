@@ -28,6 +28,7 @@
 #include <QClipboard>
 #include <QCloseEvent>
 #include <QContextMenuEvent>
+#include <QCryptographicHash>
 #include <QDesktopServices>
 #include <QDockWidget>
 #include <QFontMetrics>
@@ -48,6 +49,7 @@
 #include <QSettings>
 #include <QSignalMapper>
 #include <QStatusBar>
+#include <QStringList>
 #include <QThread>
 #include <QTimer>
 #include <QToolBar>
@@ -318,6 +320,137 @@ struct StatusBarItem
     bool placed = false;
 };
 
+#ifdef FREECAD_PERSONAL_CAD
+namespace
+{
+constexpr int layoutVersion = 1;
+constexpr size_t maxEncodedLayoutSize = 4 * 1024 * 1024;
+
+QByteArray layoutDigest(const QByteArray& state)
+{
+    return QCryptographicHash::hash(state, QCryptographicHash::Sha256).toHex();
+}
+
+QByteArray readLayoutState(const std::string& encoded, const std::string& digest)
+{
+    if (encoded.empty() || encoded.size() > maxEncodedLayoutSize) {
+        return {};
+    }
+    const auto decoded = QByteArray::fromBase64Encoding(
+        QByteArray::fromStdString(encoded),
+        QByteArray::AbortOnBase64DecodingErrors
+    );
+    if (!decoded || layoutDigest(decoded.decoded) != QByteArray::fromStdString(digest)) {
+        return {};
+    }
+    return decoded.decoded;
+}
+
+QRect readLayoutGeometry(const std::string& text)
+{
+    if (text.size() > 128) {
+        return {};
+    }
+    std::istringstream input(text);
+    int x, y, width, height;
+    if (!(input >> x >> y >> width >> height) || !(input >> std::ws).eof() || x < -QWIDGETSIZE_MAX
+        || x > QWIDGETSIZE_MAX || y < -QWIDGETSIZE_MAX || y > QWIDGETSIZE_MAX || width <= 0
+        || width > QWIDGETSIZE_MAX || height <= 0 || height > QWIDGETSIZE_MAX) {
+        return {};
+    }
+    return QRect(x, y, width, height);
+}
+
+QRect fitWindowToScreen(const MainWindow& window, const QRect& requested)
+{
+    auto* primary = QApplication::primaryScreen();
+    QRect available = primary ? primary->availableGeometry() : QRect(0, 0, 1800, 1000);
+    if (!available.isValid()) {
+        available = QRect(0, 0, 1800, 1000);
+    }
+    const QSize frameMargins = (window.frameSize() - window.size()).expandedTo(QSize(0, 0));
+    if (requested.isValid()) {
+        const QRect frame(requested.topLeft(), requested.size() + frameMargins);
+        qint64 largestOverlap = 0;
+        for (auto* screen : QApplication::screens()) {
+            const auto area = screen->availableGeometry();
+            const QRect overlap = frame.intersected(area);
+            const qint64 pixels = qint64(overlap.width()) * overlap.height();
+            if (pixels > largestOverlap) {
+                largestOverlap = pixels;
+                available = area;
+            }
+        }
+    }
+
+    const QSize preferred = requested.isValid() ? requested.size() : QSize(1800, 1000);
+    const QSize size = preferred
+                           .boundedTo((available.size() - frameMargins).expandedTo(QSize(1, 1)))
+                           .expandedTo(window.minimumSize());
+    const QSize frameSize = size + frameMargins;
+    const QPoint position = requested.isValid() ? requested.topLeft()
+                                                : available.topLeft()
+            + QPoint((available.width() - frameSize.width()) / 2,
+                     (available.height() - frameSize.height()) / 2);
+    return QRect(
+        QPoint(
+            std::clamp(
+                position.x(),
+                available.left(),
+                std::max(available.left(), available.right() + 1 - frameSize.width())
+            ),
+            std::clamp(
+                position.y(),
+                available.top(),
+                std::max(available.top(), available.bottom() + 1 - frameSize.height())
+            )
+        ),
+        size
+    );
+}
+
+QByteArray layoutDocks(const MainWindow& window)
+{
+    QStringList names;
+    for (const auto* dock : window.findChildren<QDockWidget*>()) {
+        names.append(dock->objectName());
+    }
+    names.sort();
+    return names.join(QLatin1Char('\n')).toUtf8().toBase64();
+}
+
+QByteArray layoutScreens()
+{
+    QStringList screens;
+    for (const auto* screen : QApplication::screens()) {
+        const QRect rect = screen->geometry();
+        screens.append(QStringLiteral("%1,%2,%3,%4,%5")
+                           .arg(rect.x())
+                           .arg(rect.y())
+                           .arg(rect.width())
+                           .arg(rect.height())
+                           .arg(screen->devicePixelRatio()));
+    }
+    screens.sort();
+    return screens.join(QLatin1Char(';')).toUtf8();
+}
+
+bool floatingDocksAreReachable(const MainWindow& window)
+{
+    const auto screens = QApplication::screens();
+    for (const auto* dock : window.findChildren<QDockWidget*>()) {
+        if (dock->isFloating() && std::ranges::none_of(screens, [dock](const QScreen* screen) {
+                return screen->geometry().contains(dock->frameGeometry());
+            })) {
+            return false;
+        }
+    }
+    return true;
+}
+
+}  // namespace
+#endif
+
 // -------------------------------------
 // Pimpl class
 struct MainWindowP
@@ -332,7 +465,11 @@ struct MainWindowP
     QTimer* statusTimer;
     QTimer* activityTimer;
     QTimer saveStateTimer;
+#ifdef FREECAD_PERSONAL_CAD
+    bool personalLayoutReady = false;
+#else
     QTimer restoreStateTimer;
+#endif
     QMdiArea* mdiArea;
     QPointer<MDIView> activeView;
     QSignalMapper* windowMapper;
@@ -349,7 +486,7 @@ struct MainWindowP
     ParameterGrp::handle hGrp;
     bool _restoring = false;
     QTime _showNormal;
-    void restoreWindowState(const QByteArray&);
+    bool restoreWindowState(const QByteArray&);
 };
 
 }  // namespace Gui
@@ -393,10 +530,12 @@ MainWindow::MainWindow(QWidget* parent, Qt::WindowFlags f)
                     sb->setVisible(d->hGrp->GetBool("StatusBar", sb->isVisible()));
                 }
             }
+#ifndef FREECAD_PERSONAL_CAD
             else if (boost::equals(Name, "MainWindowState")) {
                 OverlayManager::instance()->reload(OverlayManager::ReloadMode::ReloadPause);
                 d->restoreStateTimer.start(100);
             }
+#endif
         },
         fastsignals::advanced_tag()
     );
@@ -410,12 +549,14 @@ MainWindow::MainWindow(QWidget* parent, Qt::WindowFlags f)
     d->saveStateTimer.setSingleShot(true);
     connect(&d->saveStateTimer, &QTimer::timeout, [this]() { this->saveWindowSettings(); });
 
+#ifndef FREECAD_PERSONAL_CAD
     d->restoreStateTimer.setSingleShot(true);
     connect(&d->restoreStateTimer, &QTimer::timeout, [this]() {
         d->restoreWindowState(QByteArray::fromBase64(d->hGrp->GetASCII("MainWindowState").c_str()));
         ToolBarManager::getInstance()->restoreState();
         OverlayManager::instance()->reload(OverlayManager::ReloadMode::ReloadResume);
     });
+#endif
 
     // support for grouped dragging of dockwidgets
     // https://woboq.com/blog/qdockwidget-changes-in-56.html
@@ -2119,6 +2260,41 @@ void MainWindow::switchToDockedMode()
 
 void MainWindow::loadWindowSettings()
 {
+#ifdef FREECAD_PERSONAL_CAD
+    // Startup activates the initial workbench and creates its docks before this call.
+    Base::StateLocker guard(d->_restoring);
+    const bool knownLayout = !SafeMode::SafeModeEnabled()
+        && d->hGrp->GetInt("LayoutVersion", -1) == layoutVersion;
+    const QRect storedGeometry = knownLayout ? readLayoutGeometry(d->hGrp->GetASCII("Geometry"))
+                                             : QRect {};
+    const QRect startupGeometry = fitWindowToScreen(*this, storedGeometry);
+    resize(startupGeometry.size().boundedTo(size()));
+    move(startupGeometry.topLeft());
+    resize(startupGeometry.size());
+
+    bool restored = false;
+    if (storedGeometry.isValid()
+        && d->hGrp->GetASCII("LayoutDocks") == layoutDocks(*this).toStdString()
+        && d->hGrp->GetASCII("LayoutScreens") == layoutScreens().toStdString()) {
+        const QByteArray saved = readLayoutState(
+            d->hGrp->GetASCII("MainWindowState"),
+            d->hGrp->GetASCII("LayoutDigest")
+        );
+        if (!saved.isEmpty()) {
+            const QByteArray defaultState = saveState(layoutVersion);
+            restored = d->restoreWindowState(saved);
+            if (!restored) {
+                restoreState(defaultState, layoutVersion);
+            }
+        }
+    }
+    if (!restored) {
+        DockWindowManager::instance()->resetVisibility();
+        OverlayManager::instance()->clearSavedLayout();
+    }
+    const bool max = storedGeometry.isValid() && d->hGrp->GetBool("Maximized", false);
+    const bool showStatusBar = !knownLayout || d->hGrp->GetBool("StatusBar", true);
+#else
     QString vendor = QString::fromStdString(App::Application::Config()["ExeVendor"]);
     QString application = QString::fromStdString(App::Application::getExecutableName());
     int major = (QT_VERSION >> 0x10) & 0xff;
@@ -2199,6 +2375,7 @@ void MainWindow::loadWindowSettings()
     Base::StateLocker guard(d->_restoring);
 
     d->restoreWindowState(windowState);
+#endif
     std::clog << "Main window restored" << std::endl;
 
     max ? showMaximized() : show();
@@ -2219,6 +2396,9 @@ void MainWindow::loadWindowSettings()
     std::clog << "Toolbars restored" << std::endl;
 
     OverlayManager::instance()->restore();
+#ifdef FREECAD_PERSONAL_CAD
+    d->personalLayoutReady = true;
+#endif
 }
 
 bool MainWindow::isRestoringWindowState() const
@@ -2226,31 +2406,48 @@ bool MainWindow::isRestoringWindowState() const
     return d->_restoring;
 }
 
-void MainWindowP::restoreWindowState(const QByteArray& windowState)
+bool MainWindowP::restoreWindowState(const QByteArray& windowState)
 {
     if (windowState.isEmpty()) {
-        return;
+        return false;
     }
 
     Base::StateLocker guard(_restoring);
 
     // tmp. disable the report window to suppress some bothering warnings
+#ifdef FREECAD_PERSONAL_CAD
+    constexpr int version = layoutVersion;
+#else
+    constexpr int version = 0;
+#endif
+    bool restored;
     if (Base::Console().isMsgTypeEnabled("ReportOutput", Base::ConsoleSingleton::MsgType_Wrn)) {
         Base::Console().setEnabledMsgType("ReportOutput", Base::ConsoleSingleton::MsgType_Wrn, false);
-        getMainWindow()->restoreState(windowState);
+        restored = getMainWindow()->restoreState(windowState, version);
         Base::Console().setEnabledMsgType("ReportOutput", Base::ConsoleSingleton::MsgType_Wrn, true);
     }
     else {
-        getMainWindow()->restoreState(windowState);
+        restored = getMainWindow()->restoreState(windowState, version);
     }
 
+#ifdef FREECAD_PERSONAL_CAD
+    if (!restored || !floatingDocksAreReachable(*getMainWindow())) {
+        return false;
+    }
+#endif
     fastsignals::shared_connection_block blocker(connParam);
     // as a notification for user code on window state restore
     hGrp->SetBool("WindowStateRestored", !hGrp->GetBool("WindowStateRestored", false));
+    return restored;
 }
 
 void MainWindow::saveWindowSettings(bool canDelay)
 {
+#ifdef FREECAD_PERSONAL_CAD
+    if (!d->personalLayoutReady || SafeMode::SafeModeEnabled()) {
+        return;
+    }
+#endif
     if (isRestoringWindowState()) {
         return;
     }
@@ -2263,16 +2460,28 @@ void MainWindow::saveWindowSettings(bool canDelay)
     fastsignals::shared_connection_block blocker(d->connParam);
     d->hGrp->SetBool("Maximized", this->isMaximized());
     d->hGrp->SetBool("StatusBar", this->statusBar()->isVisible());
-    d->hGrp->SetASCII("MainWindowState", this->saveState().toBase64().constData());
-
     std::ostringstream ss;
+#ifdef FREECAD_PERSONAL_CAD
+    const QByteArray state = saveState(layoutVersion);
+    d->hGrp->SetASCII("MainWindowState", state.toBase64().constData());
+    d->hGrp->SetASCII("LayoutDigest", layoutDigest(state).constData());
+    d->hGrp->SetASCII("LayoutDocks", layoutDocks(*this).constData());
+    d->hGrp->SetASCII("LayoutScreens", layoutScreens().constData());
+    QRect rect = (isMaximized() || isFullScreen()) ? normalGeometry() : QRect(pos(), size());
+    rect = fitWindowToScreen(*this, rect);
+#else
+    d->hGrp->SetASCII("MainWindowState", this->saveState().toBase64().constData());
     QRect rect(this->pos(), this->size());
+#endif
     ss << rect.left() << " " << rect.top() << " " << rect.width() << " " << rect.height();
     d->hGrp->SetASCII("Geometry", ss.str().c_str());
 
     DockWindowManager::instance()->saveState();
     OverlayManager::instance()->save();
     ToolBarManager::getInstance()->saveState();
+#ifdef FREECAD_PERSONAL_CAD
+    d->hGrp->SetInt("LayoutVersion", layoutVersion);
+#endif
 }
 
 void MainWindow::startSplasher()

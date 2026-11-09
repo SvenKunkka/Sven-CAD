@@ -975,8 +975,9 @@ class DarwinPlatform:
         return self.enabled
 
     def post(self) -> None:
-        # add special path for MacOSX (bug #0000307): Where is this bug documented?
-        sys.path.append(os.path.expanduser("~/Library/Application Support/FreeCAD/Mod"))
+        # Stock FreeCAD supports the deprecated unversioned macOS add-on path.
+        if App.ConfigGet("ExeName") != "PersonalCAD":
+            sys.path.append(os.path.expanduser("~/Library/Application Support/FreeCAD/Mod"))
 
 
 class ModState(IntEnum):

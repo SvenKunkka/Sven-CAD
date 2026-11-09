@@ -82,7 +82,7 @@ PyMOD_INIT_FUNC(FreeCAD)
 {
     // Init phase ===========================================================
     App::Application::Config()["ExeName"] = ProductIdentity::executableName;
-    App::Application::Config()["ExeVendor"] = "FreeCAD";
+    App::Application::Config()["ExeVendor"] = ProductIdentity::executableName;
     App::Application::Config()["AppDataSkipVendor"] = "true";
 
     QByteArray path;

@@ -71,7 +71,7 @@ int main(int argc, char** argv)
 
     // Name and Version of the Application
     App::Application::Config()["ExeName"] = ProductIdentity::executableName;
-    App::Application::Config()["ExeVendor"] = "FreeCAD";
+    App::Application::Config()["ExeVendor"] = ProductIdentity::executableName;
     App::Application::Config()["AppDataSkipVendor"] = "true";
 
     // set the banner (for logging and console)

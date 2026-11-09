@@ -2078,7 +2078,7 @@ void MainWindow::delayedStartup()
         safeModePopup.exec();
     }
 
-#ifdef Q_OS_MAC
+#if defined(Q_OS_MAC) && !defined(FREECAD_PERSONAL_CAD)
     // Register QuickLook extensions on first launch
     registerQuickLookExtensions();
 #endif

@@ -348,6 +348,9 @@ void PropertyContainer::Restore(Base::XMLReader &reader)
         // subclass of PropertyContainer might change the type of a property but
         // not its name. In this case we would force to read-in a wrong property
         // type and the behaviour would be undefined.
+#ifdef FREECAD_PERSONAL_CAD
+        bool restored = false;
+#endif
         try {
             auto prop = getPropertyByName(PropName.c_str());
             if (!prop || prop->getContainer() != this) {
@@ -386,6 +389,9 @@ void PropertyContainer::Restore(Base::XMLReader &reader)
                 Base::Console().error("Property {} of type {} was subject to a partial restore.\n",PropName,TypeName);
                 reader.clearPartialRestoreProperty();
             }
+#ifdef FREECAD_PERSONAL_CAD
+            restored = true;
+#endif
         }
         catch (const Base::XMLParseException&) {
             throw; // re-throw
@@ -407,6 +413,12 @@ void PropertyContainer::Restore(Base::XMLReader &reader)
 #ifndef FC_DEBUG
         catch (...) {
             Base::Console().error("PropertyContainer::Restore: Unknown C++ exception thrown\n");
+        }
+#endif
+#ifdef FREECAD_PERSONAL_CAD
+        if (!restored) {
+            reader.setPartialRestore(true);
+            reader.clearPartialRestoreProperty();
         }
 #endif
         reader.readEndElement("Property");

@@ -72,6 +72,9 @@
 
 #include "Document.h"
 #include "private/DocumentP.h"
+#ifdef FREECAD_PERSONAL_CAD
+#include "private/PersonalDocumentCompatibility.h"
+#endif
 #include "Application.h"
 #include "AutoTransaction.h"
 #include "BackupPolicy.h"
@@ -115,6 +118,25 @@ bool transactionStateBlocksRecoveryWrite(const DocumentP& documentPrivate)
     return documentPrivate.bookedTransaction != NullTransaction
         || documentPrivate.activeUndoTransaction != nullptr || documentPrivate.committing;
 }
+
+#ifdef FREECAD_PERSONAL_CAD
+bool incompletePersonalDocument(const Document& document)
+{
+    return document.testStatus(Document::RestoreError)
+        || document.testStatus(Document::PartialRestore);
+}
+
+void requireCompletePersonalDocument(const Document& document)
+{
+    if (incompletePersonalDocument(document)) {
+        throw Base::FileException(
+            "This document could not be fully restored. Saving is disabled. "
+            "Open the original in FreeCAD to inspect the missing data.",
+            document.FileName.getValue()
+        );
+    }
+}
+#endif
 
 }  // namespace
 
@@ -1211,6 +1233,9 @@ void Document::Restore(Base::XMLReader& reader)
             }
             catch (Base::Exception&) {
                 Base::Console().message("Cannot create object '{}'\n", name);
+#ifdef FREECAD_PERSONAL_CAD
+                reader.setPartialRestore(true);
+#endif
             }
         }
         reader.readEndElement("Features");
@@ -1693,9 +1718,19 @@ std::vector<DocumentObject*> Document::readObjects(Base::XMLReader& reader)
                     }
                 }
             }
+#ifdef FREECAD_PERSONAL_CAD
+            else if (!testStatus(Document::Importing)) {
+                reader.setPartialRestore(true);
+            }
+#endif
         }
         catch (const Base::Exception& e) {
             Base::Console().error("Cannot create object '{}': ({})\n", name, e.what());
+#ifdef FREECAD_PERSONAL_CAD
+            if (!testStatus(Document::Importing)) {
+                reader.setPartialRestore(true);
+            }
+#endif
         }
     }
     if (!testStatus(Status::Importing)) {
@@ -1716,9 +1751,15 @@ std::vector<DocumentObject*> Document::readObjects(Base::XMLReader& reader)
             && !pObj->testStatus(
                 PartialObject)) {  // check if this feature has been registered
             pObj->setStatus(ObjectStatus::Restore, true);
+#ifdef FREECAD_PERSONAL_CAD
+            bool restored = false;
+#endif
             try {
                 FC_TRACE("restoring " << pObj->getFullName());
                 pObj->Restore(reader);
+#ifdef FREECAD_PERSONAL_CAD
+                restored = true;
+#endif
             }
             // Try to continue only for certain exception types if not handled
             // by the feature type. For all other exception types abort the process.
@@ -1738,6 +1779,11 @@ std::vector<DocumentObject*> Document::readObjects(Base::XMLReader& reader)
                 e.reportException();
             }
 
+#ifdef FREECAD_PERSONAL_CAD
+            if (!restored) {
+                reader.setPartialRestore(true);
+            }
+#endif
             pObj->setStatus(ObjectStatus::Restore, false);
 
             if (reader.testStatus(Base::XMLReader::ReaderStatus::PartialRestoreInDocumentObject)) {
@@ -1897,6 +1943,9 @@ static std::string checkFileName(const char* file)
 
 bool Document::saveAs(const char* _file)
 {
+#ifdef FREECAD_PERSONAL_CAD
+    requireCompletePersonalDocument(*this);
+#endif
     const std::string file = checkFileName(_file);
     const Base::FileInfo fi(file.c_str());
     if (this->FileName.getStrValue() != file) {
@@ -1916,6 +1965,11 @@ bool Document::saveCopy(const char* file) const
 
 bool Document::canWriteRecoverySnapshot() const
 {
+#ifdef FREECAD_PERSONAL_CAD
+    if (incompletePersonalDocument(*this)) {
+        return false;
+    }
+#endif
     return !testStatus(Document::PartialDoc) && !testStatus(Document::TempDoc)
         && !testStatus(Document::Recomputing) && !transactionStateBlocksRecoveryWrite(*d)
         && !isPerformingTransaction();
@@ -1924,6 +1978,9 @@ bool Document::canWriteRecoverySnapshot() const
 // Save the document under the name it has been opened
 bool Document::save()
 {
+#ifdef FREECAD_PERSONAL_CAD
+    requireCompletePersonalDocument(*this);
+#endif
     if (testStatus(Document::PartialDoc)) {
         FC_ERR("Partial loaded document '" << Label.getValue() << "' cannot be saved");
         // TODO We don't make this a fatal error and return 'true' to make it possible to
@@ -1967,6 +2024,9 @@ bool Document::save()
 
 bool Document::saveToFile(const char* filename) const
 {
+#ifdef FREECAD_PERSONAL_CAD
+    requireCompletePersonalDocument(*this);
+#endif
     signalStartSave(*this, filename);
 
     auto hGrp = GetApplication().GetParameterGroupByPath(
@@ -2144,6 +2204,29 @@ void Document::restore(const char* filename,
                        bool delaySignal,
                        const std::vector<std::string>& objNames)
 {
+    if (!filename) {
+        filename = FileName.getValue();
+    }
+    Base::FileInfo fi(filename);
+    Base::ifstream file(fi, std::ios::in | std::ios::binary);
+    std::streambuf* buf = file.rdbuf();
+    std::streamoff size = buf->pubseekoff(0, std::ios::end, std::ios::in);
+    buf->pubseekoff(0, std::ios::beg, std::ios::in);
+    if (size < 22) {  // an empty zip archive has 22 bytes
+        throw Base::FileException("Invalid project file", filename);
+    }
+
+#ifdef FREECAD_PERSONAL_CAD
+    checkPersonalProject(file, filename);
+    file.clear();
+    file.seekg(0);
+    if (!file) {
+        throw Base::FileException("Could not restart reading the project file", filename);
+    }
+    setStatus(Document::RestoreError, false);
+    setStatus(Document::PartialRestore, false);
+#endif
+
     clearUndos();
     d->activeObject = nullptr;
 
@@ -2172,18 +2255,6 @@ void Document::restore(const char* filename,
         if (activeDoc == this) {
             GetApplication().setActiveDocument(this);
         }
-    }
-
-    if (!filename) {
-        filename = FileName.getValue();
-    }
-    Base::FileInfo fi(filename);
-    Base::ifstream file(fi, std::ios::in | std::ios::binary);
-    std::streambuf* buf = file.rdbuf();
-    std::streamoff size = buf->pubseekoff(0, std::ios::end, std::ios::in);
-    buf->pubseekoff(0, std::ios::beg, std::ios::in);
-    if (size < 22) {  // an empty zip archive has 22 bytes
-        throw Base::FileException("Invalid project file", filename);
     }
 
     zipios::ZipInputStream zipstream(file);
@@ -2269,6 +2340,11 @@ bool Document::afterRestore(const std::vector<DocumentObject*>& objArray, bool c
             catch (const Base::Exception& e) {
                 FC_ERR("Failed to restore " << obj->getFullName() << '.' << prop->getName() << ": "
                                             << e.what());
+#ifdef FREECAD_PERSONAL_CAD
+                if (!testStatus(Document::Importing)) {
+                    setStatus(Document::PartialRestore, true);
+                }
+#endif
             }
         }
     }
@@ -2284,6 +2360,9 @@ bool Document::afterRestore(const std::vector<DocumentObject*>& objArray, bool c
         if (objSet.find(obj) == objSet.end()) {
             continue;
         }
+#ifdef FREECAD_PERSONAL_CAD
+        bool restored = false;
+#endif
         try {
             for (auto prop : propMap[obj]) {
                 prop->onContainerRestored();
@@ -2297,6 +2376,9 @@ bool Document::afterRestore(const std::vector<DocumentObject*>& objArray, bool c
                 d->addRecomputeLog(returnCode);
             }
             obj->onDocumentRestored();
+#ifdef FREECAD_PERSONAL_CAD
+            restored = returnCode == DocumentObject::StdReturn;
+#endif
             if (touched) {
                 d->touchedObjs.insert(obj);
             }
@@ -2323,6 +2405,11 @@ bool Document::afterRestore(const std::vector<DocumentObject*>& objArray, bool c
             d->addRecomputeLog("Unknown exception on restore", obj);
             FC_ERR("Failed to restore " << obj->getFullName() << ": " << "unknown exception");
         }
+#ifdef FREECAD_PERSONAL_CAD
+        if (!restored && !testStatus(Document::Importing)) {
+            setStatus(Document::PartialRestore, true);
+        }
+#endif
         if (obj->isValid()) {
             auto& props = propMap[obj];
             props.clear();

@@ -518,6 +518,9 @@ void PropertyPythonObject::Restore(Base::XMLReader& reader)
             e.reportException();
             this->object = Py::None();
             load_failed = true;
+#ifdef FREECAD_PERSONAL_CAD
+            reader.setPartialRestore(true);
+#endif
         }
 
         aboutToSetValue();

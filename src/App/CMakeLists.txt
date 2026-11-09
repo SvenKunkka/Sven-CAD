@@ -265,6 +265,12 @@ SET(Document_SRCS
     ${Document_CPP_SRCS}
     ${Document_HPP_SRCS}
 )
+if(FREECAD_PERSONAL_CAD)
+    list(APPEND Document_SRCS
+        private/PersonalDocumentCompatibility.cpp
+        private/PersonalDocumentCompatibility.h
+    )
+endif()
 SOURCE_GROUP("Document" FILES ${Document_SRCS})
 
 # The property stuff

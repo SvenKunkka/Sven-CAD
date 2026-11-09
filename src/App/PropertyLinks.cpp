@@ -4117,12 +4117,26 @@ int PropertyXLink::checkRestore(std::string* msg) const
         }
         return 0;
     }
+#ifdef FREECAD_PERSONAL_CAD
+    if (docInfo->pcDoc
+        && (docInfo->pcDoc->testStatus(App::Document::RestoreError)
+            || docInfo->pcDoc->testStatus(App::Document::PartialRestore))) {
+        if (msg) {
+            *msg = "Linked document was not fully restored: " + docInfo->pcDoc->Label.getStrValue();
+        }
+        return 2;
+    }
+#endif
     if (!_pcLink) {
         if (testFlag(LinkSilentRestore)) {
             return 0;
         }
         if (testFlag(LinkAllowPartial)
+#ifdef FREECAD_PERSONAL_CAD
+            && docInfo->pcDoc && docInfo->pcDoc->testStatus(App::Document::PartialDoc)) {
+#else
             && (!docInfo->pcDoc || docInfo->pcDoc->testStatus(App::Document::PartialDoc))) {
+#endif
             return 0;
         }
         if (msg) {

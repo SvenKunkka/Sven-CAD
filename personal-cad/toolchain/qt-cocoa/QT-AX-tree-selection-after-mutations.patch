@@ -1,0 +1,141 @@
+--- a/src/widgets/accessible/itemviews.cpp
++++ b/src/widgets/accessible/itemviews.cpp
+@@ -705,12 +705,13 @@
+             QAccessible::Id id = iter.value();
+             QAccessibleInterface *iface = QAccessible::accessibleInterface(id);
+             Q_ASSERT(iface);
+-            if (iface->role() == QAccessible::Cell || iface->role() == QAccessible::ListItem) {
++            if (iface->role() == QAccessible::Cell || iface->role() == QAccessible::ListItem
++                || iface->role() == QAccessible::TreeItem) {
+                 Q_ASSERT(iface->tableCellInterface());
+                 QAccessibleTableCell *cell = static_cast<QAccessibleTableCell*>(iface->tableCellInterface());
+-                // Since it is a QPersistentModelIndex, we only need to check if it is valid
+-                if (cell->m_index.isValid())
+-                    newCache.insert(indexOfChild(cell), id);
++                const int childIndex = cell->m_index.isValid() ? indexOfChild(cell) : -1;
++                if (childIndex >= 0)
++                    newCache.insert(childIndex, id);
+                 else
+                     QAccessible::deleteAccessibleInterface(id);
+             } else if (event->modelChangeType() == QAccessibleTableModelChangeEvent::RowsRemoved
+@@ -836,28 +837,38 @@
+     if (logicalIndex < 0 || !theModel || !theModel->columnCount(rootIndex))
+         return nullptr;
+ 
+-    auto id = childToId.constFind(logicalIndex);
+-    if (id != childToId.constEnd())
+-        return QAccessible::accessibleInterface(id.value());
+-
+-    QAccessibleInterface *iface = nullptr;
++    QModelIndex modelIndex;
+     int index = logicalIndex;
+-
+-    if (horizontalHeader()) {
+-        if (index < theModel->columnCount(rootIndex))
+-            iface = new QAccessibleTableHeaderCell(theView, index, Qt::Horizontal);
+-        else
+-            index -= theModel->columnCount(rootIndex);
+-    }
+-
+-    if (!iface) {
+-        const int row = index / theModel->columnCount(rootIndex);
+-        const int column = index % theModel->columnCount(rootIndex);
+-        const QModelIndex modelIndex = indexFromLogical(row, column);
++    const int columns = theModel->columnCount(rootIndex);
++    const bool isHeader = horizontalHeader() && index < columns;
++    if (!isHeader) {
++        if (horizontalHeader())
++            index -= columns;
++        modelIndex = indexFromLogical(index / columns, index % columns);
+         if (!modelIndex.isValid())
+             return nullptr;
++    }
++
++    const auto cached = childToId.constFind(logicalIndex);
++    if (cached != childToId.constEnd()) {
++        const QAccessible::Id id = cached.value();
++        auto *iface = QAccessible::accessibleInterface(id);
++        if (iface) {
++            if (isHeader && iface->role() == QAccessible::ColumnHeader)
++                return iface;
++            if (!isHeader && iface->role() == QAccessible::TreeItem
++                && static_cast<QAccessibleTableCell *>(iface)->m_index == modelIndex)
++                return iface;
++        }
++        childToId.erase(cached);
++        QAccessible::deleteAccessibleInterface(id);
++    }
++
++    QAccessibleInterface *iface = nullptr;
++    if (isHeader)
++        iface = new QAccessibleTableHeaderCell(theView, index, Qt::Horizontal);
++    else
+         iface = new QAccessibleTableCell(theView, modelIndex, cellRole());
+-    }
+     QAccessible::registerAccessibleInterface(iface);
+     childToId.insert(logicalIndex, QAccessible::uniqueId(iface));
+     return iface;
+@@ -887,11 +898,7 @@
+         const QAccessibleTableCell* cell = static_cast<const QAccessibleTableCell*>(iface);
+         const QTreeView *treeView = qobject_cast<const QTreeView *>(theView);
+         Q_ASSERT(treeView);
+-        int row = treeView->d_func()->viewIndex(cell->m_index) + (horizontalHeader() ? 1 : 0);
+-        int column = cell->m_index.column();
+-
+-        int index = row * theModel->columnCount(theView->rootIndex()) + column;
+-        return index;
++        return cell->m_index.isValid() ? treeView->d_func()->accessibleChildIndex(cell->m_index) : -1;
+     } else if (iface->role() == QAccessible::ColumnHeader){
+         const QAccessibleTableHeaderCell* cell = static_cast<const QAccessibleTableHeaderCell*>(iface);
+         return cell->index;
+--- a/src/widgets/itemviews/qtreeview.cpp
++++ b/src/widgets/itemviews/qtreeview.cpp
+@@ -4080,7 +4080,9 @@
+     // Note that this will include the header, even if its hidden.
+     if (q->header())
+         ++rowForIndex;
+-    const int columnCount = index.model()->columnCount();
++    const int columnCount = index.model()->columnCount(q->rootIndex());
++    if (index.column() >= columnCount)
++        return -1;
+ 
+     const qulonglong childIndex = qulonglong(rowForIndex) * columnCount + index.column();
+     const int result = q26::saturate_cast<int>(childIndex);
+--- a/tests/auto/other/qaccessibilitymac/tst_qaccessibilitymac.mm
++++ b/tests/auto/other/qaccessibilitymac/tst_qaccessibilitymac.mm
+@@ -942,7 +942,6 @@
+     QCOMPARE(cellText(1, 1), users->text(1));
+ 
+     const auto checkSelection = [&](QTreeWidgetItem *item) {
+-        tw->setCurrentItem(item, 0, QItemSelectionModel::ClearAndSelect);
+         QCoreApplication::processEvents();
+         CFTypeRef selectedChildrenValue = nullptr;
+         QCOMPARE(AXUIElementCopyAttributeValue([tv ref], kAXSelectedChildrenAttribute,
+@@ -958,8 +957,27 @@
+     };
+ 
+     // Both model indexes have row 0, but only the root has visible tree row 0.
++    tw->setCurrentItem(root, 0, QItemSelectionModel::ClearAndSelect);
+     checkSelection(root);
++    tw->setCurrentItem(users, 0, QItemSelectionModel::ClearAndSelect);
+     checkSelection(users);
++
++    // Moving the selected row by inserting and removing a preceding sibling
++    // must preserve its persistent item and the interface clients already hold.
++    const auto selectedId = [&]() -> QAccessible::Id {
++        auto *iface = QAccessible::queryAccessibleInterface(tw);
++        const auto selected = iface->selectionInterface()->selectedItems();
++        return selected.size() == 1 ? QAccessible::uniqueId(selected.first()) : 0;
++    };
++    const QAccessible::Id usersId = selectedId();
++    QVERIFY(usersId);
++    auto *inserted = new QTreeWidgetItem({"Desktop", "4"});
++    root->insertChild(0, inserted);
++    checkSelection(users);
++    QCOMPARE(selectedId(), usersId);
++    delete inserted;
++    checkSelection(users);
++    QCOMPARE(selectedId(), usersId);
+ 
+     [tv release];
+     [appObject release];

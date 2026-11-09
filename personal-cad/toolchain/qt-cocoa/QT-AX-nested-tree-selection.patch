@@ -1,0 +1,67 @@
+--- a/src/widgets/accessible/itemviews_p.h
++++ b/src/widgets/accessible/itemviews_p.h
+@@ -134,6 +134,7 @@
+ 
+     // table interface
+     QAccessibleInterface *cellAt(int row, int column) const override;
++    QList<QAccessibleInterface *> selectedCells() const override;
+     QString rowDescription(int row) const override;
+     bool isRowSelected(int row) const override;
+     bool selectRow(int row) override;
+--- a/src/widgets/accessible/itemviews.cpp
++++ b/src/widgets/accessible/itemviews.cpp
+@@ -917,6 +917,24 @@
+     return child(logicalIndex);
+ }
+ 
++QList<QAccessibleInterface *> QAccessibleTree::selectedCells() const
++{
++    const auto *treeView = qobject_cast<const QTreeView *>(view());
++    if (!treeView || !treeView->selectionModel())
++        return {};
++
++    const QModelIndexList selectedIndexes = treeView->selectionModel()->selectedIndexes();
++    QList<QAccessibleInterface *> cells;
++    cells.reserve(selectedIndexes.size());
++    for (const QModelIndex &index : selectedIndexes) {
++        // Model rows are parent-relative. Accessible children use visual tree order.
++        const int childIndex = treeView->d_func()->accessibleChildIndex(index);
++        if (auto *iface = child(childIndex))
++            cells.append(iface);
++    }
++    return cells;
++}
++
+ QString QAccessibleTree::rowDescription(int) const
+ {
+     return QString(); // no headers for rows in trees
+--- a/tests/auto/other/qaccessibilitymac/tst_qaccessibilitymac.mm
++++ b/tests/auto/other/qaccessibilitymac/tst_qaccessibilitymac.mm
+@@ -941,6 +941,27 @@
+     QCOMPARE(cellText(1, 0), users->text(0));
+     QCOMPARE(cellText(1, 1), users->text(1));
+ 
++    const auto checkSelection = [&](QTreeWidgetItem *item) {
++        tw->setCurrentItem(item, 0, QItemSelectionModel::ClearAndSelect);
++        QCoreApplication::processEvents();
++        CFTypeRef selectedChildrenValue = nullptr;
++        QCOMPARE(AXUIElementCopyAttributeValue([tv ref], kAXSelectedChildrenAttribute,
++                                               &selectedChildrenValue), kAXErrorSuccess);
++        NSArray *selectedChildren = (NSArray *)selectedChildrenValue;
++        QVERIFY(selectedChildren != nil);
++        QCOMPARE(selectedChildren.count, 1u);
++        TestAXObject *selectedCell = [[TestAXObject alloc]
++                initWithAXUIElementRef:(AXUIElementRef)selectedChildren[0]];
++        QCOMPARE(QString::fromNSString(selectedCell.title), item->text(0));
++        [selectedCell release];
++        [selectedChildren release];
++    };
++
++    // Both model indexes have row 0, but only the root has visible tree row 0.
++    checkSelection(root);
++    checkSelection(users);
++
++    [tv release];
+     [appObject release];
+     [window release];
+ }

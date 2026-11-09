@@ -26,6 +26,7 @@
 #include <QGridLayout>
 #include <QLabel>
 #include <QLayout>
+#include <QSignalBlocker>
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <QWidget>
@@ -38,6 +39,7 @@
 #include <Base/Parameter.h>
 #include <Base/UnitsApi.h>
 #include <Gui/Language/Translator.h>
+#include <Gui/Navigation/NavigationDefaults.h>
 #include <Gui/Navigation/NavigationStyle.h>
 
 using namespace StartGui;
@@ -238,14 +240,12 @@ void GeneralSettingsWidget::retranslateUi()
     _unitSystemComboBox->setCurrentIndex(userSchema);
 
     _navigationStyleLabel->setText(createLabelText(tr("Navigation Style")));
+    const QSignalBlocker blockNavigationChanges(_navigationStyleComboBox);
     _navigationStyleComboBox->clear();
     ParameterGrp::handle hGrpNav = App::GetApplication().GetParameterGroupByPath(
         "User parameter:BaseApp/Preferences/View"
     );
-    auto navStyleName = hGrpNav->GetASCII(
-        "NavigationStyle",
-        std::string {Gui::CADNavigationStyle::getClassTypeId().getName()}.c_str()
-    );
+    auto navStyleName = hGrpNav->GetASCII("NavigationStyle", Gui::defaultNavigationStyleName());
     std::map<Base::Type, std::string> styles = Gui::UserNavigationStyle::getUserFriendlyNames();
     for (const auto& style : styles) {
         QByteArray data(style.first.getName());

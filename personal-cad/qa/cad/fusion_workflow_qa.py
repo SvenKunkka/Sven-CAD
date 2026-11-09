@@ -73,6 +73,7 @@ def run_macro():
         viewport = graphics.viewport()
         window.raise_()
         window.activateWindow()
+        QtWidgets.QApplication.setActiveWindow(window)
         viewport.setFocus()
         wait(70)
         focus = QtWidgets.QApplication.focusWidget()
@@ -337,6 +338,7 @@ def run_macro():
             press(key.Key_S)
             toolbox = widget(window, QtWidgets.QDialog, "PersonalCadModelToolbox")
             require(toolbox.isVisible(), "S did not open the command search palette")
+            QtWidgets.QApplication.setActiveWindow(toolbox)
             field = toolbox.findChild(QtWidgets.QLineEdit)
             require(field is not None and QtWidgets.QApplication.focusWidget() is field,
                     "S did not focus the search input")

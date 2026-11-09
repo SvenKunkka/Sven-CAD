@@ -139,6 +139,9 @@
 #include "Navigation/NavigationStyle.h"
 #include "Navigation/GestureNavigationStyle.h"
 #include "Navigation/SiemensNXNavigationStyle.h"
+#ifdef FREECAD_PERSONAL_CAD
+#include "Navigation/FusionNavigationStyle.h"
+#endif
 #include "Selection.h"
 #include "SoDevicePixelRatioElement.h"
 #include "SoFCDB.h"
@@ -834,6 +837,30 @@ public:
             return false;
         }
 
+#ifdef FREECAD_PERSONAL_CAD
+        auto* viewer = static_cast<View3DInventorViewer*>(obj);
+        auto* navigation = viewer->navigationStyle();
+        const bool fusionNavigation = navigation
+            && navigation->getTypeId() == FusionNavigationStyle::getClassTypeId();
+        if (fusionNavigation && event->type() == QEvent::MouseButtonDblClick) {
+            auto* mouseEvent = static_cast<QMouseEvent*>(event);
+            if (mouseEvent->button() == Qt::MiddleButton
+                && mouseEvent->buttons() == Qt::MiddleButton
+                && mouseEvent->modifiers() == Qt::NoModifier && !navigation->isSelecting()) {
+                viewer->viewAll();
+                return true;
+            }
+        }
+        if (fusionNavigation
+            && (event->type() == QEvent::UngrabMouse || event->type() == QEvent::WindowDeactivate)) {
+            const auto mode = navigation->getViewingMode();
+            if (mode == NavigationStyle::PANNING || mode == NavigationStyle::DRAGGING
+                || mode == NavigationStyle::ZOOMING) {
+                navigation->resetButtonState();
+            }
+        }
+#endif
+
         if (event->type() == Spaceball::ButtonEvent::ButtonEventType) {
             auto buttonEvent = static_cast<Spaceball::ButtonEvent*>(event);  // NOLINT
             if (!buttonEvent) {
@@ -851,6 +878,13 @@ public:
 
         if (event->type() == QEvent::MouseButtonPress) {
             auto mouseEvent = static_cast<QMouseEvent*>(event);
+#ifdef FREECAD_PERSONAL_CAD
+            if (fusionNavigation && mouseEvent->buttons().testFlag(Qt::MiddleButton)) {
+                longPressTimer->stop();
+                currentViewer = nullptr;
+                return false;
+            }
+#endif
             if (mouseEvent->button() == Qt::LeftButton) {
                 currentViewer = static_cast<View3DInventorViewer*>(obj);
                 pressPosition = mouseEvent->pos();
@@ -1494,7 +1528,11 @@ Document* View3DInventorViewer::getDocument()
 
 void View3DInventorViewer::initialize()
 {
+#ifdef FREECAD_PERSONAL_CAD
+    navigation = new FusionNavigationStyle();
+#else
     navigation = new CADNavigationStyle();
+#endif
     navigation->setViewer(this);
 
     this->axiscrossEnabled = true;

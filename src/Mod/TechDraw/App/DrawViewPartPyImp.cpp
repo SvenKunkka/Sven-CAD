@@ -189,7 +189,8 @@ PyObject* DrawViewPartPy::replaceCosmeticEdges(PyObject *args)
 {
     PyObject* pRemove = nullptr;
     PyObject* pAdd = nullptr;
-    if (!PyArg_ParseTuple(args, "O!O!", &PyList_Type, &pRemove, &PyList_Type, &pAdd)) {
+    int paint = 1;
+    if (!PyArg_ParseTuple(args, "O!O!|p", &PyList_Type, &pRemove, &PyList_Type, &pAdd, &paint)) {
         return nullptr;
     }
     DrawViewPart* dvp = getDrawViewPartPtr();
@@ -301,7 +302,10 @@ PyObject* DrawViewPartPy::replaceCosmeticEdges(PyObject *args)
     edges.insert(edges.end(), created.begin(), created.end());
     dvp->CosmeticEdges.setValues(edges);
     dvp->refreshCEGeoms();
-    dvp->requestPaint();
+    if (paint) {
+        // A full redraw of the view; callers changing many edges ask once at the end.
+        dvp->requestPaint();
+    }
 
     Py::List result;
     for (const auto& tag : tags) {

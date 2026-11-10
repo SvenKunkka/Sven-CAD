@@ -265,8 +265,10 @@ class DrawViewPart(DrawView):
         """point3d = getOriginalCentroid() - returns the centre used by the last projection of this view."""
         ...
 
-    def replaceCosmeticEdges(self, remove: list[str], add: list[tuple], /) -> list[str]:
-        """tags = replaceCosmeticEdges(removeTags, items) - remove and add cosmetic edges in one change.
+    def replaceCosmeticEdges(self, remove: list[str], add: list[tuple], paint: bool = True, /) -> list[str]:
+        """tags = replaceCosmeticEdges(removeTags, items, paint=True) - remove and add cosmetic edges in one change.
+
+        With paint False the view is not redrawn; call requestPaint() once after a batch.
 
         Each item is ("view", p1, p2, style, weight) in view coordinates, ("line", p1, p2, style, weight)
         or ("arc", centre, radius, angle1, angle2, style, weight) in 3D. Returns one tag per item, empty

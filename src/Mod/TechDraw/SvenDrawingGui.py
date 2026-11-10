@@ -128,6 +128,9 @@ def export_drawing(page, pdf_path):
         raise SvenDrawing.DrawingError(tr("The views are still being computed. Try again in a moment."))
     page.Document.recompute()
     wait_for_views(page)
+    # Callout edges redraw lazily; the PDF prints the scene, so bring it up to date first.
+    SvenDrawing.flush_paint()
+    Gui.updateGui()
     written = []
     write_pdf(page, base + ".pdf")
     written.append(base + ".pdf")
@@ -277,6 +280,9 @@ class BomTableObserver:
 
     def slotRecomputedDocument(self, doc):
         import SvenDrawing
+        if SvenDrawing._PENDING_PAINT:
+            from PySide import QtCore
+            QtCore.QTimer.singleShot(0, SvenDrawing.flush_paint)
         if doc.Name in self.pending or doc.Restoring or doc.Transacting:
             return
         if not any(p.isDerivedFrom("TechDraw::DrawPage") and SvenDrawing.bom_needs_layout(p) for p in doc.Objects):

@@ -262,11 +262,29 @@ def _remove_edges(view, tags):
     _replace_edges(view, tags, [])
 
 
+_PENDING_PAINT = set()
+
+
+def flush_paint():
+    """Redraw the views whose callout edges changed since the last flush."""
+    pending = list(_PENDING_PAINT)
+    _PENDING_PAINT.clear()
+    for doc_name, view_name in pending:
+        doc = App.listDocuments().get(doc_name)
+        view = doc.getObject(view_name) if doc is not None else None
+        if view is not None and hasattr(view, "requestPaint"):
+            view.requestPaint()
+    return len(pending)
+
+
 def _replace_edges(view, old_tags, lines):
     """Swap a callout's cosmetic edges in one change, so the view redraws once and keeps no stale lines."""
     if hasattr(view, "replaceCosmeticEdges"):
         items = [tuple(float(v) if isinstance(v, float) else v for v in line) for line in lines]
-        return [t for t in view.replaceCosmeticEdges(list(old_tags), items) if t]
+        # Redrawing a view rebuilds all of its edges; with many callouts that dominated, so the
+        # redraw waits until flush_paint() after the batch or the recompute.
+        _PENDING_PAINT.add((view.Document.Name, view.Name))
+        return [t for t in view.replaceCosmeticEdges(list(old_tags), items, False) if t]
     for tag in old_tags:
         try:
             view.removeCosmeticEdge(tag)
@@ -445,12 +463,14 @@ def add_callouts(view):
         created.append(obj)
     for obj in created:
         obj.recompute()
+    flush_paint()
     return created
 
 
 def remove_callout(obj):
     if obj.SourceView is not None:
         _remove_edges(obj.SourceView, obj.CosmeticTags)
+        flush_paint()
     obj.Document.removeObject(obj.Name)
 
 

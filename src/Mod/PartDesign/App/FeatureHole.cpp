@@ -1262,7 +1262,10 @@ void Hole::updateDiameterParam()
         ThreadDiameter.setValue(threadDescription[threadType][threadSize].diameter);
     }
 #ifdef FREECAD_PERSONAL_CAD
-    ThreadPitch.setValueIfChanged(threadType > 0 && threadSize >= 0 ? getThreadPitch() : 0.0);
+    const double pitch = threadType > 0 && threadSize >= 0 ? getThreadPitch() : 0.0;
+    if (ThreadPitch.getValue() != pitch) {
+        ThreadPitch.setValue(pitch);
+    }
 #endif
     if (auto opt = determineDiameter()) {
         Diameter.setValue(opt.value());

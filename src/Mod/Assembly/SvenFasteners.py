@@ -89,6 +89,13 @@ def find(part_number):
 
 
 def _token_matches(token, item):
+    standard_number = item["standard"].split()[-1]
+    length = re.fullmatch(r"(?:l|x|×)?(\d+(?:\.\d+)?)(?:mm)?", token)
+    if length:
+        # Bare numbers mean a length, except the number of a standard such as 4762.
+        if token == standard_number:
+            return True
+        return bool(item["length"]) and math.isclose(item["length"], float(length.group(1)))
     if token in item["part_number"].lower():
         return True
     if token == item["size"].lower():
@@ -105,9 +112,6 @@ def _token_matches(token, item):
     if sized:
         return (item["size"].lower() == sized.group(1) and item["length"]
                 and math.isclose(item["length"], float(sized.group(2))))
-    length = re.fullmatch(r"(?:l|x|×)?(\d+(?:\.\d+)?)(?:mm)?", token)
-    if length and item["length"]:
-        return math.isclose(item["length"], float(length.group(1)))
     return False
 
 

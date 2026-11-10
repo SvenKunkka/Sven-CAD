@@ -26,6 +26,7 @@ PROPERTIES = (
     ("StandardEdition", "App::PropertyString", "Standard edition as recorded by the data source"),
     ("Description", "App::PropertyString", "Fastener description"),
     ("Size", "App::PropertyString", "Nominal metric thread size"),
+    ("Specification", "App::PropertyString", "Size and nominal length used by drawings and the BOM"),
     ("ThreadPitch", "App::PropertyLength", "Nominal coarse thread pitch"),
     ("NominalLength", "App::PropertyLength", "Nominal screw length, zero for nuts and washers"),
     ("ThreadRepresentation", "App::PropertyString", "How the thread is represented"),
@@ -189,6 +190,7 @@ def ensure_source(doc, item):
     """Return the one source solid of a catalog item, creating it once per document."""
     existing = find_source(doc, item)
     if existing is not None:
+        _complete_source(existing, item)
         return existing, False
     source = doc.addObject("Part::Feature", "Fastener_" + re.sub(r"\W", "_", item["part_number"]))
     for name, kind, doc_string in PROPERTIES:
@@ -200,6 +202,7 @@ def ensure_source(doc, item):
     source.StandardEdition = item["edition"]
     source.Description = item["description"]
     source.Size = item["size"]
+    source.Specification = specification(item)
     source.ThreadPitch = item["pitch"]
     source.NominalLength = item["length"]
     source.ThreadRepresentation = "Schematic, nominal diameter"
@@ -211,8 +214,35 @@ def ensure_source(doc, item):
         source.setEditorMode(name, 1)
     source.Shape = make_shape(item)
     source.Label = item["part_number"]
+    source.Label2 = item["description"]
     library(doc).addObject(source)
     return source, True
+
+
+def specification(item):
+    """Size and nominal length, such as M3x8 for a screw or M3 for a nut."""
+    return f"{item['size']}x{item['length']:g}" if item["length"] else item["size"]
+
+
+def _complete_source(source, item):
+    """Add properties introduced after the source was created, keeping existing values."""
+    if not hasattr(source, "Specification"):
+        source.addProperty("App::PropertyString", "Specification", GROUP,
+                           "Size and nominal length used by drawings and the BOM")
+        source.Specification = specification(item)
+        source.setEditorMode("Specification", 1)
+    if not source.Label2:
+        source.Label2 = item["description"]
+
+
+def complete_sources(doc):
+    """Bring every fastener source of a document up to the current property set."""
+    for source in sources(doc):
+        try:
+            item = find(source.PartNumber)
+        except FastenerError:
+            continue
+        _complete_source(source, item)
 
 
 def source_of(link):

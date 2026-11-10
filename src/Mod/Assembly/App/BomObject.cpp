@@ -165,11 +165,36 @@ void BomObject::saveCustomColumnData()
 }
 #endif
 
+#ifdef FREECAD_PERSONAL_CAD
+short BomObject::mustExecute() const
+{
+    if (isRestoring() || !getDocument() || getDocument()->isPerformingTransaction()) {
+        return App::DocumentObject::mustExecute();
+    }
+    auto* self = const_cast<BomObject*>(this);
+    self->collectRows();
+    const bool stale = self->tableEntries != BomRows.getValues();
+    self->tableEntries.clear();
+    self->obj_list.clear();
+    self->obj_mirrored_list.clear();
+    return stale ? 1 : App::DocumentObject::mustExecute();
+}
+
 void BomObject::generateBOM()
 {
-#ifdef FREECAD_PERSONAL_CAD
+    collectRows();
+    if (BomRows.getValues() != tableEntries) {
+        BomRows.setValues(tableEntries);
+    }
+    tableEntries.clear();
+}
+
+void BomObject::collectRows()
+{
     tableEntries.clear();
 #else
+void BomObject::generateBOM()
+{
     saveCustomColumnData();
     clearAll();
 #endif
@@ -197,12 +222,6 @@ void BomObject::generateBOM()
     else {
         addObjectChildrenToBom(getDocument()->getRootObjectsIgnoreLinks(), row, "");
     }
-#ifdef FREECAD_PERSONAL_CAD
-    if (BomRows.getValues() != tableEntries) {
-        BomRows.setValues(tableEntries);
-    }
-    tableEntries.clear();
-#endif
 }
 
 void BomObject::addObjectChildrenToBom(
@@ -228,6 +247,19 @@ void BomObject::addObjectChildrenToBom(
         }
 
         bool isMirrored = isObjMirrored(child);
+        int count = 1;
+#ifdef FREECAD_PERSONAL_CAD
+        // A link array stands for ElementCount instances of the same part.
+        if (auto* link = freecad_cast<App::Link*>(child); link && link->ElementCount.getValue() > 0) {
+            count = link->ElementCount.getValue();
+            // getLinkedObject() of an array resolves to the array itself, so follow the property.
+            auto* target = link->LinkedObject.getValue();
+            child = target ? target->getLinkedObject(true) : nullptr;
+            if (!child) {
+                continue;
+            }
+        }
+#endif
 
         if (auto* asmLink = freecad_cast<AssemblyLink*>(child)) {
             child = asmLink->getLinkedAssembly();
@@ -260,7 +292,7 @@ void BomObject::addObjectChildrenToBom(
                     && idInList < obj_mirrored_list.size()
                     && isMirrored == obj_mirrored_list[idInList]) {
 
-                    int qty = std::stoi(getText(i, quantityColIndex)) + 1;
+                    int qty = std::stoi(getText(i, quantityColIndex)) + count;
                     setText(i, quantityColIndex, std::to_string(qty));
                     found = true;
                     break;
@@ -275,6 +307,9 @@ void BomObject::addObjectChildrenToBom(
         ++sub_i;
 
         addObjectToBom(child, row, sub_index, isMirrored);
+        if (hasQuantityCol && count != 1) {
+            setText(row, quantityColIndex, std::to_string(count));
+        }
         siblingRows.push_back(row);
         ++row;
 
@@ -369,6 +404,12 @@ std::string BomObject::getBomPropertyValue(App::DocumentObject* obj, const std::
 {
     App::Property* prop = obj->getPropertyByName(baseName.c_str());
 
+#ifdef FREECAD_PERSONAL_CAD
+    // Parts that do not carry the property, such as plain bodies in a fastener column, stay blank.
+    if (!prop) {
+        return {};
+    }
+#endif
     if (!prop) {
         Base::Console().warning("Property not found: {}\n", baseName);
         return QObject::tr("N/A").toStdString();

@@ -83,6 +83,10 @@ public:
     }
 
     App::DocumentObjectExecReturn* execute() override;
+#ifdef FREECAD_PERSONAL_CAD
+    // The BOM has no links to the parts it lists, so it checks for stale rows itself.
+    short mustExecute() const override;
+#endif
 
     void generateBOM();
     void addObjectToBom(App::DocumentObject* obj, size_t row, std::string index, bool isMirrored = false);
@@ -110,6 +114,7 @@ private:
 #ifdef FREECAD_PERSONAL_CAD
     App::PropertyStringList BomRows;
     std::vector<std::string> tableEntries;
+    void collectRows();
 #else
     void saveCustomColumnData();
     std::vector<BomDataElement> dataElements;

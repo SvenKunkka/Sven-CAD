@@ -80,6 +80,9 @@
 #include "FeatureGeometrySet.h"
 #include "FeatureMirroring.h"
 #include "FeatureOffset.h"
+#ifdef FREECAD_PERSONAL_CAD
+#include "FeatureSvenPlanarOffset.h"
+#endif
 #include "FeaturePartBoolean.h"
 #include "FeaturePartBox.h"
 #include "FeaturePartCircle.h"
@@ -530,6 +533,9 @@ PyMOD_INIT_FUNC(Part)
     Part::Sweep                 ::init();
     Part::Offset                ::init();
     Part::Offset2D              ::init();
+#ifdef FREECAD_PERSONAL_CAD
+    Part::SvenPlanarOffset      ::init();
+#endif
     Part::Thickness             ::init();
     Part::Refine                ::init();
     Part::Reverse               ::init();

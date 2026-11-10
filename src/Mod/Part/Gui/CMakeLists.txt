@@ -295,6 +295,10 @@ SET(PartGuiIcon_SVG
 
 add_library(PartGui SHARED ${PartGui_SRCS} ${PartGuiIcon_SVG})
 
+if(FREECAD_PERSONAL_CAD)
+    target_sources(PartGui PRIVATE CommandSvenPlanarOffset.cpp)
+endif()
+
 if(FREECAD_USE_PCH)
     target_precompile_headers(PartGui PRIVATE
             $<$<COMPILE_LANGUAGE:CXX>:"${CMAKE_CURRENT_LIST_DIR}/PreCompiled.h">

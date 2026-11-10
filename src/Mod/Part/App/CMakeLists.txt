@@ -660,6 +660,10 @@ if(EIGEN3_NO_DEPRECATED_COPY)
 endif()
 
 target_sources(Part PRIVATE ${Part_SRCS} ${FCBRepAlgoAPI_SRCS})
+
+if(FREECAD_PERSONAL_CAD)
+    target_sources(Part PRIVATE FeatureSvenPlanarOffset.cpp FeatureSvenPlanarOffset.h)
+endif()
 target_link_libraries(Part ${Part_LIBS})
 
 if (MSVC)

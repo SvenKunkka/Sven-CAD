@@ -3009,10 +3009,17 @@ public:
 };
 //---------------------------------------------------------------
 
+#ifdef FREECAD_PERSONAL_CAD
+void registerSvenPlanarOffset(Gui::CommandManager& commands);
+#endif
+
 void CreatePartCommands()
 {
     Gui::CommandManager& rcCmdMgr = Gui::Application::Instance->commandManager();
 
+#ifdef FREECAD_PERSONAL_CAD
+    registerSvenPlanarOffset(rcCmdMgr);
+#endif
     rcCmdMgr.addCommand(new CmdPartMakeSolid());
     rcCmdMgr.addCommand(new CmdPartReverseShape());
     rcCmdMgr.addCommand(new CmdPartBoolean());

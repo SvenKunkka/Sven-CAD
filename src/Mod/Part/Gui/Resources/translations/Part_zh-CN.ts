@@ -2,6 +2,84 @@
 <!DOCTYPE TS>
 <TS version="2.1" language="zh-CN" sourcelanguage="en">
   <context>
+    <name>CmdSvenPlanarOffset</name>
+    <message>
+      <source>Offset Planar Face</source>
+      <translation>平面偏移</translation>
+    </message>
+    <message>
+      <source>Offsets a planar face of one STEP solid</source>
+      <translation>偏移单个 STEP 实体的平面</translation>
+    </message>
+    <message>
+      <source>Distance</source>
+      <translation>距离</translation>
+    </message>
+    <message>
+      <source>Select one planar face on a STEP solid.</source>
+      <translation>请选择 STEP 实体上的一个平面。</translation>
+    </message>
+    <message>
+      <source>Show the source solid before offsetting its face.</source>
+      <translation>偏移前请先显示源实体。</translation>
+    </message>
+    <message>
+      <source>The source face is no longer available.</source>
+      <translation>无法再访问源面。</translation>
+    </message>
+    <message>
+      <source>Positive moves outward. Negative moves inward.</source>
+      <translation>正值向外偏移，负值向内偏移。</translation>
+    </message>
+    <message>
+      <source>The geometry engine could not preview this offset.</source>
+      <translation>无法预览此偏移。</translation>
+    </message>
+    <message>
+      <source>The source or document changed before confirmation.</source>
+      <translation>确认前源面或文档发生了变化。</translation>
+    </message>
+    <message>
+      <source>The planar offset could not be applied.</source>
+      <translation>无法应用平面偏移。</translation>
+    </message>
+  </context>
+  <context>
+    <name>SvenPlanarOffset</name>
+    <message>
+      <source>Enter a non-zero offset distance.</source>
+      <translation>请输入非零的偏移距离。</translation>
+    </message>
+    <message>
+      <source>Select a face of one valid solid.</source>
+      <translation>请选择单个有效实体的一个面。</translation>
+    </message>
+    <message>
+      <source>The source face could not be resolved.</source>
+      <translation>无法定位源面。</translation>
+    </message>
+    <message>
+      <source>Select one planar face.</source>
+      <translation>请选择一个平面。</translation>
+    </message>
+    <message>
+      <source>Adjacent faces must extend in the offset direction for the entire distance.</source>
+      <translation>相邻面必须能沿偏移方向延伸至指定距离。</translation>
+    </message>
+    <message>
+      <source>The offset would consume the solid.</source>
+      <translation>偏移会使实体消失。</translation>
+    </message>
+    <message>
+      <source>The offset would not produce one valid solid.</source>
+      <translation>偏移无法生成一个有效实体。</translation>
+    </message>
+    <message>
+      <source>The offset intersects other geometry or crosses the opposite wall.</source>
+      <translation>偏移与其他几何相交，或越过了对侧壁。</translation>
+    </message>
+  </context>
+  <context>
     <name>Attacher</name>
     <message>
       <location filename="../../AttacherTexts.cpp" line="864"/>

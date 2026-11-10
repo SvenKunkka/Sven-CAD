@@ -184,6 +184,135 @@ def run_macro():
         Gui.activeDocument().resetEdit()
         App.closeDocument(assembly_doc.Name)
 
+    def check_planar_offset():
+        import ImportGui
+        from pivy import coin
+
+        Gui.activateWorkbench("PartDesignWorkbench")
+        doc = App.newDocument("SvenPlanarOffsetQA")
+        doc.UndoMode = 1
+        step = output / "planar-offset.step"
+        model = Part.makeBox(10, 8, 6).cut(Part.makeCylinder(1.5, 6, App.Vector(5, 4, 0)))
+        model.exportStep(str(step))
+        ImportGui.insert(str(step), doc.Name, merge=False, useLinkGroup=False)
+        source, = [obj for obj in doc.Objects if obj.TypeId == "Part::Feature"]
+        group = source.getParentGeoFeatureGroup()
+        if group is None:
+            group = doc.addObject("App::Part", "ImportedPart")
+            group.addObject(source)
+        top, = [i for i, face in enumerate(source.Shape.Faces, 1)
+                if isinstance(face.Surface, Part.Plane) and math.isclose(face.CenterOfMass.z, 6)]
+        cylinder, = [i for i, face in enumerate(source.Shape.Faces, 1)
+                     if isinstance(face.Surface, Part.Cylinder)]
+        source.Placement = App.Placement(App.Vector(3, 4, 2), App.Rotation(App.Vector(1, 0, 0), 25))
+        group.Placement = App.Placement(App.Vector(21, -11, 5), App.Rotation(App.Vector(0, 1, 0), 33))
+        source.ViewObject.DiffuseColor = [
+            (0.8, 0.2, 0.1) if i == top else (0.1, 0.6, 0.8)
+            for i in range(1, len(source.Shape.Faces) + 1)
+        ]
+        doc.recompute()
+        view = Gui.activeDocument().activeView()
+        view.fitAll()
+
+        def preview_present():
+            search = coin.SoSearchAction()
+            search.setName("SvenPlanarOffsetPreview")
+            search.apply(view.getSceneGraph())
+            return bool(search.getPath())
+
+        def state():
+            return (tuple(obj.Name for obj in doc.Objects), doc.UndoCount, doc.RedoCount,
+                    source.ViewObject.Visibility, source.Shape.exportBrepToString())
+
+        def try_offset(face_index, distance, valid, apply=False):
+            select(doc.Name, group.Name, f"{source.Name}.Face{face_index}")
+            initial = state()
+            observations = []
+            poll = QtCore.QTimer()
+
+            def inspect():
+                dialog = window.findChild(QtWidgets.QDialog, "SvenPlanarOffsetDialog")
+                if dialog is None or not dialog.isVisible():
+                    return
+                poll.stop()
+                try:
+                    spin = widget(dialog, QtWidgets.QDoubleSpinBox, "SvenPlanarOffsetDistance")
+                    buttons = dialog.findChild(QtWidgets.QDialogButtonBox)
+                    ok = buttons.button(QtWidgets.QDialogButtonBox.StandardButton.Ok)
+                    spin.setValue(distance)
+                    wait(220)
+                    require(ok.isEnabled() == valid, f"Unexpected offset validity for {distance} mm")
+                    require(preview_present() == valid, "The Coin preview did not match offset validity")
+                    require(state() == initial, "Preview changed document objects, undo, or source geometry")
+                    observations.append(True)
+                    if apply:
+                        ok.click()
+                    else:
+                        buttons.button(QtWidgets.QDialogButtonBox.StandardButton.Cancel).click()
+                except Exception:
+                    observations.append(traceback.format_exc())
+                    dialog.reject()
+
+            poll.timeout.connect(inspect)
+            poll.start(30)
+            press(key.Key_Q)
+            poll.stop()
+            require(observations == [True], f"Q did not complete the offset dialog: {observations}")
+            require(not preview_present(), "Offset preview survived closing the dialog")
+            require(Gui.activeWorkbench().name() == "PartDesignWorkbench", "Q switched workbenches")
+            if not apply:
+                require(state() == initial, "Cancel or invalid input changed the model")
+
+        try_offset(top, 2, valid=True)
+        try_offset(top, -1.5, valid=True)
+        try_offset(top, -6, valid=False)
+        try_offset(cylinder, 1, valid=False)
+        original = state()
+        face_area = source.Shape.Faces[top - 1].Area
+        original_volume = source.Shape.Volume
+        try_offset(top, 1.25, valid=True, apply=True)
+        result, = [obj for obj in doc.Objects if obj.TypeId == "Part::SvenPlanarOffset"]
+        result_name, source_name, group_name = result.Name, source.Name, group.Name
+        require(result.getParentGeoFeatureGroup() == group
+                and result.getGlobalPlacement().isSame(source.getGlobalPlacement(), 1e-9),
+                "Offset did not preserve the rotated parent and source placements")
+        require(result.Shape.isValid() and len(result.Shape.Solids) == 1
+                and math.isclose(result.Shape.Volume, original_volume + 1.25 * face_area, abs_tol=1e-5),
+                "Positive offset has incorrect solid geometry")
+        require(len(result.ViewObject.DiffuseColor) == len(result.Shape.Faces)
+                and len(set(tuple(color) for color in result.ViewObject.DiffuseColor)) == 2,
+                "Offset did not preserve both source face colors")
+        require(doc.UndoCount == original[1] + 1 and not source.ViewObject.Visibility,
+                "Offset did not commit exactly one undo entry and hide its source")
+        doc.undo()
+        require(doc.getObject(result_name) is None and source.ViewObject.Visibility
+                and source.Shape.exportBrepToString() == original[-1],
+                "Undo did not restore the unmodified source and its visibility")
+        doc.redo()
+        result = doc.getObject(result_name)
+        require(result and result.Shape.isValid() and not source.ViewObject.Visibility,
+                "Redo did not restore the offset")
+        target = output / "planar-offset.FCStd"
+        doc.saveAs(str(target))
+        App.closeDocument(doc.Name)
+        restored = App.openDocument(str(target))
+        result, source = restored.getObject(result_name), restored.getObject(source_name)
+        require(result.Support[0] == source and result.getParentGeoFeatureGroup().Name == group_name,
+                "Saved offset did not restore its support and group")
+        result.Offset = App.Units.Quantity("-1.5 mm")
+        restored.recompute()
+        require(result.Shape.isValid() and result.getGlobalPlacement().isSame(source.getGlobalPlacement(), 1e-9)
+                and math.isclose(result.Shape.Volume, original_volume - 1.5 * face_area, abs_tol=1e-5),
+                "Negative offset failed after reopening and editing its distance")
+        checks["Q_planar_STEP_offset"] = {
+            "source_volume_mm3": original_volume,
+            "positive_distance_mm": 1.25,
+            "reopened_negative_distance_mm": result.Offset.Value,
+            "negative_volume_mm3": result.Shape.Volume,
+            "preview_cancel_reject_undo_redo": True,
+        }
+        App.closeDocument(restored.Name)
+
     def execute():
         try:
             print("QA phase: toolbar and workbench switching", file=sys.stderr, flush=True)
@@ -311,10 +440,9 @@ def run_macro():
             press(key.Key_Q)
             require(len(doc.Objects) == object_count and not Gui.Control.activeDialog(),
                     "Q on a solid face unexpectedly altered the model")
-            face_notice = next((label.text() for label in window.findChildren(QtWidgets.QLabel)
-                                if "Individual face offset is unavailable" in label.text()), "")
-            require(face_notice, "Q face dispatch did not show its unavailable-operation explanation")
-            checks["Q_unsupported_face_unchanged"] = face_notice
+            require(not any(dialog.isVisible() for dialog in window.findChildren(
+                QtWidgets.QDialog, "SvenPlanarOffsetDialog")), "Q accepted a PartDesign Pad face")
+            checks["Q_unsupported_face_unchanged"] = True
 
             standalone = doc.addObject("Part::Box", "RecomputeProbe")
             doc.recompute()
@@ -372,6 +500,8 @@ def run_macro():
                 checks["Command_B_recomputes_model"] = True
 
             App.closeDocument(doc.Name)
+            print("QA phase: Q planar STEP offset", file=sys.stderr, flush=True)
+            check_planar_offset()
             if preview:
                 checks["L_R_C_open_and_cancel_native_picker"] = "skipped by --skip-outer"
             else:

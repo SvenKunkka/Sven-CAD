@@ -557,6 +557,8 @@ def main():
         print(json.dumps(evidence, indent=2))
         return
 
+    if personal and run("git", "-C", CANDIDATE, "status", "--porcelain").strip():
+        raise ValueError("Build and stage the personal app from a clean checkout.")
     installed, app_files, receipt_hash = install_receipt(personal)
     qt_digests = qt_output_digests(args.qt_build_receipt)
     evidence["source_install_files"] = len(app_files)

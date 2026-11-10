@@ -302,7 +302,7 @@ void DocumentRecovery::accept()
                     item->setToolTip(1, errorInfo);
                     item->setForeground(1, QColor(170, 0, 0));
                 }
-                d->writeRecoveryInfo(info);
+                // Keep the snapshot eligible for another attempt after a temporary I/O failure.
             }
             ++index;
         }

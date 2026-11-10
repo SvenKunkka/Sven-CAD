@@ -172,16 +172,20 @@ TopoShape SvenPlanarOffset::calculate(const Feature& source, const char* faceNam
         throw Base::ValueError("Enter a non-zero offset distance.");
     }
 
-    auto solid = source.Shape.getShape();
+    const auto& sourceShape = source.Shape.getShape();
+    const auto originalFace = sourceShape.getSubTopoShape(faceName, true);
+    const auto faceIndex = originalFace.isNull() ? 0 : sourceShape.findShape(originalFace.getShape());
+    if (faceIndex <= 0 || originalFace.getShape().ShapeType() != TopAbs_FACE) {
+        throw Base::ValueError("The source face could not be resolved.");
+    }
+    // OCCT's prism builder adds p-curves to its input edges. Give it independent topology and geometry.
+    auto solid = sourceShape.makeElementCopy();
     solid.locate(TopLoc_Location());
     const auto& base = solid.getShape();
     if (!isSingleSolid(base) || !BRepCheck_Analyzer(base).IsValid()) {
         throw Base::ValueError("Select a face of one valid solid.");
     }
-    auto faceShape = solid.getSubTopoShape(faceName, true);
-    if (faceShape.isNull() || faceShape.getShape().ShapeType() != TopAbs_FACE) {
-        throw Base::ValueError("The source face could not be resolved.");
-    }
+    auto faceShape = solid.getSubTopoShape(TopAbs_FACE, faceIndex);
     const auto& face = TopoDS::Face(faceShape.getShape());
     BRepAdaptor_Surface surface(face);
     if (surface.GetType() != GeomAbs_Plane) {

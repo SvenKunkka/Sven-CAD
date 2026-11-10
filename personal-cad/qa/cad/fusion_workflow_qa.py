@@ -15,6 +15,7 @@ import traceback
 REPORT_ENV = "PERSONAL_CAD_FUSION_QA_OUTPUT"
 SKIP_OUTER_ENV = "PERSONAL_CAD_FUSION_QA_SKIP_OUTER"
 ALLOW_PREVIEW_ICON_ENV = "PERSONAL_CAD_FUSION_QA_ALLOW_PREVIEW_ICON"
+ONLY_Q_OFFSET_ENV = "PERSONAL_CAD_FUSION_QA_ONLY_Q_OFFSET"
 
 
 def require(condition, message):
@@ -224,7 +225,7 @@ def run_macro():
             return (tuple(obj.Name for obj in doc.Objects), doc.UndoCount, doc.RedoCount,
                     source.ViewObject.Visibility, source.Shape.exportBrepToString())
 
-        def try_offset(face_index, distance, valid, apply=False):
+        def try_offset(face_index, distance, valid, apply=False, actual_shortcut=False):
             select(doc.Name, group.Name, f"{source.Name}.Face{face_index}")
             initial = state()
             observations = []
@@ -255,7 +256,11 @@ def run_macro():
 
             poll.timeout.connect(inspect)
             poll.start(30)
-            press(key.Key_Q)
+            if actual_shortcut:
+                press(key.Key_Q)
+            else:
+                Gui.runCommand("PersonalCAD_PressPull")
+                wait(220)
             poll.stop()
             require(observations == [True], f"Q did not complete the offset dialog: {observations}")
             require(not preview_present(), "Offset preview survived closing the dialog")
@@ -263,7 +268,7 @@ def run_macro():
             if not apply:
                 require(state() == initial, "Cancel or invalid input changed the model")
 
-        try_offset(top, 2, valid=True)
+        try_offset(top, 2, valid=True, actual_shortcut=True)
         try_offset(top, -1.5, valid=True)
         try_offset(top, -6, valid=False)
         try_offset(cylinder, 1, valid=False)
@@ -312,6 +317,22 @@ def run_macro():
             "preview_cancel_reject_undo_redo": True,
         }
         App.closeDocument(restored.Name)
+
+    def finish():
+        (output / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
+        if report["status"] == "passed":
+            Gui.runCommand("Std_Quit", 0)
+        else:
+            os._exit(1)
+
+    def execute_q_offset_only():
+        try:
+            check_shortcuts({"PersonalCAD_PressPull": "Q"})
+            check_planar_offset()
+            report["status"] = "passed"
+        except Exception:
+            report["error"] = traceback.format_exc()
+        finish()
 
     def execute():
         try:
@@ -514,13 +535,11 @@ def run_macro():
         except Exception:
             report["error"] = traceback.format_exc()
 
-        (output / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
-        if report["status"] == "passed":
-            Gui.runCommand("Std_Quit", 0)
-        else:
-            os._exit(1)
+        finish()
 
-    QtCore.QTimer.singleShot(500, execute)
+    QtCore.QTimer.singleShot(
+        500, execute_q_offset_only if os.environ.get(ONLY_Q_OFFSET_ENV) == "1" else execute
+    )
 
 
 def main():
@@ -533,6 +552,8 @@ def main():
                         help="Record known preview icon and action-association failures and keep testing")
     parser.add_argument("--require-no-main-thread-warnings", action="store_true",
                         help="Fail if a GUI API reports being called outside the main thread")
+    parser.add_argument("--only-q-offset", action="store_true",
+                        help="Exercise the planar STEP offset and its Q binding in isolation")
     args = parser.parse_args()
     app = args.app.resolve()
     info = plistlib.loads((app / "Contents/Info.plist").read_bytes())
@@ -564,6 +585,7 @@ def main():
             REPORT_ENV: str(output),
             SKIP_OUTER_ENV: "1" if args.skip_outer else "0",
             ALLOW_PREVIEW_ICON_ENV: "1" if args.allow_preview_joint_icon else "0",
+            ONLY_Q_OFFSET_ENV: "1" if args.only_q_offset else "0",
         }
         command = [str(executable), "--user-cfg", str(profile / "user.cfg"),
                    "--system-cfg", str(profile / "system.cfg"), str(macro)]

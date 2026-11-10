@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
+#include <algorithm>
+#include <cmath>
 #include <exception>
+#include <limits>
 
 #include <QCoreApplication>
 #include <QDialog>
@@ -12,7 +15,15 @@
 #include <QScopeGuard>
 #include <QTimer>
 
+#include <BRepAdaptor_Surface.hxx>
+#include <BRepGProp.hxx>
+#include <GProp_GProps.hxx>
+#include <gp_Cylinder.hxx>
+#include <gp_Lin.hxx>
+#include <gp_Pln.hxx>
+#include <Precision.hxx>
 #include <Standard_Failure.hxx>
+#include <TopoDS.hxx>
 
 #include <App/AutoTransaction.h>
 #include <App/Document.h>
@@ -62,34 +73,121 @@ Part::Feature* selectedSource(const App::SubObjectT& selection)
     return static_cast<Part::Feature*>(source);
 }
 
+GProp_GProps faceProperties(const TopoDS_Face& face)
+{
+    GProp_GProps properties;
+    BRepGProp::SurfaceProperties(face, properties);
+    return properties;
+}
+
+bool sameSurface(const BRepAdaptor_Surface& first, const BRepAdaptor_Surface& second)
+{
+    const double tolerance = 10 * Precision::Confusion();
+    const double angle = 1e-6;
+    if (first.GetType() != second.GetType()) {
+        return false;
+    }
+    if (first.GetType() == GeomAbs_Plane) {
+        const auto plane = first.Plane();
+        const auto other = second.Plane();
+        return plane.Axis().Direction().IsParallel(other.Axis().Direction(), angle)
+            && plane.Distance(other.Location()) <= tolerance;
+    }
+    if (first.GetType() == GeomAbs_Cylinder) {
+        const auto cylinder = first.Cylinder();
+        const auto other = second.Cylinder();
+        return cylinder.Axis().Direction().IsParallel(other.Axis().Direction(), angle)
+            && gp_Lin(cylinder.Axis()).Distance(other.Location()) <= tolerance
+            && std::abs(cylinder.Radius() - other.Radius()) <= tolerance;
+    }
+    return false;
+}
+
 void copyAppearance(
     Part::Feature& source,
-    Part::Feature& result,
+    SvenPlanarOffset& result,
     const char* supportFace,
     PartGui::ViewProviderPartExt& sourceView,
     PartGui::ViewProviderPartExt& resultView
 )
 {
     const auto& materials = sourceView.ShapeAppearance.getValues();
-    if (materials.size() <= 1) {
+    if (materials.empty()) {
+        return;
+    }
+    if (materials.size() == 1) {
         resultView.ShapeAppearance.setValues(materials);
         return;
     }
 
-    // Use the selected face's material for a new cap if the Boolean operation did not map it.
     int selectedIndex = 0;
     App::SubObjectT(&source, supportFace).getOldElementName(&selectedIndex);
-    const auto fallback = selectedIndex > 0 && static_cast<size_t>(selectedIndex) <= materials.size()
-        ? materials[selectedIndex - 1]
-        : materials.front();
-    const auto faceCount = result.Shape.getShape().countSubShapes(TopAbs_FACE);
-    std::vector<App::Material> appearance(faceCount, fallback);
-    for (size_t i = 0; i < materials.size(); ++i) {
+    const auto& originalShape = source.Shape.getShape();
+    const auto& resultShape = result.Shape.getShape();
+    const auto sourceFaces = originalShape.countSubShapes(TopAbs_FACE);
+    const auto resultFaces = resultShape.countSubShapes(TopAbs_FACE);
+    const size_t coloredFaces = std::min<size_t>(sourceFaces, materials.size());
+    std::vector<int> mapped(resultFaces, -1);
+    for (size_t i = 0; i < coloredFaces; ++i) {
         const auto name = "Face" + std::to_string(i + 1);
         for (const auto& face : Part::Feature::getElementFromSource(&result, "", &source, name.c_str())) {
             const auto index = face.index.getIndex();
-            if (index > 0 && static_cast<size_t>(index) <= appearance.size()) {
-                appearance[index - 1] = materials[i];
+            if (index > 0 && static_cast<size_t>(index) <= mapped.size()) {
+                auto& previous = mapped[index - 1];
+                if (previous == -1) {
+                    previous = static_cast<int>(i);
+                }
+                else if (previous >= 0 && materials[previous] != materials[i]) {
+                    previous = -2;
+                }
+            }
+        }
+    }
+
+    const auto support = TopoDS::Face(originalShape.getSubShape(TopAbs_FACE, selectedIndex));
+    auto normal = BRepAdaptor_Surface(support).Plane().Axis().Direction();
+    if (support.Orientation() == TopAbs_REVERSED) {
+        normal.Reverse();
+    }
+    const auto cap = faceProperties(support);
+    const auto expectedCap = cap.CentreOfMass().Translated(gp_Vec(normal) * result.Offset.getValue());
+    const double tolerance = 10 * Precision::Confusion();
+    std::vector<App::Material> appearance(resultFaces, materials.front());
+    for (size_t i = 0; i < appearance.size(); ++i) {
+        const auto face = TopoDS::Face(resultShape.getSubShape(TopAbs_FACE, static_cast<int>(i + 1)));
+        const BRepAdaptor_Surface surface(face);
+        const auto props = faceProperties(face);
+        if (surface.GetType() == GeomAbs_Plane && selectedIndex > 0
+            && static_cast<size_t>(selectedIndex) <= coloredFaces
+            && props.CentreOfMass().Distance(expectedCap) <= tolerance
+            && std::abs(props.Mass() - cap.Mass()) <= tolerance * std::sqrt(cap.Mass())) {
+            appearance[i] = materials[selectedIndex - 1];
+        }
+        else if (mapped[i] >= 0) {
+            appearance[i] = materials[mapped[i]];
+        }
+        else if (surface.GetType() == GeomAbs_Plane || surface.GetType() == GeomAbs_Cylinder) {
+            // Imported faces may have no recoverable history. Match a unique nearby analytic surface.
+            double nearest = std::numeric_limits<double>::infinity();
+            int match = -1;
+            for (size_t j = 0; j < coloredFaces; ++j) {
+                const auto original = TopoDS::Face(
+                    originalShape.getSubShape(TopAbs_FACE, static_cast<int>(j + 1))
+                );
+                if (!sameSurface(surface, BRepAdaptor_Surface(original))) {
+                    continue;
+                }
+                const double distance = props.CentreOfMass().Distance(faceProperties(original).CentreOfMass());
+                if (std::abs(distance - nearest) <= tolerance) {
+                    match = -1;
+                }
+                else if (distance < nearest) {
+                    nearest = distance;
+                    match = static_cast<int>(j);
+                }
+            }
+            if (match >= 0) {
+                appearance[i] = materials[match];
             }
         }
     }
@@ -191,10 +289,8 @@ protected:
                     return;
                 }
                 auto result = SvenPlanarOffset::calculate(*support, face.c_str(), distance->value());
-                // Keep viewport meshing off the live source topology.
-                auto display = result.makeElementCopy(nullptr, false, false);
                 PartGui::ViewProviderPartExt::setupCoinGeometry(
-                    display.getShape(),
+                    result.getShape(),
                     preview,
                     0.5,
                     15.0

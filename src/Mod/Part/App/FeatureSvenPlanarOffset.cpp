@@ -12,6 +12,7 @@
 #include <BRepAdaptor_Curve.hxx>
 #include <BRepAdaptor_Surface.hxx>
 #include <BRepCheck_Analyzer.hxx>
+#include <BRepClass_FaceClassifier.hxx>
 #include <BRepGProp.hxx>
 #include <BRepPrimAPI_MakeCylinder.hxx>
 #include <GProp_GProps.hxx>
@@ -202,12 +203,7 @@ void nameEditedFace(TopoShape& shape, int index, const std::string& identity)
     }
 }
 
-struct Bore
-{
-    gp_Ax2 start;
-    double radius;
-    double depth;
-};
+using Bore = SvenHoleResize::Bore;
 
 Bore describeBore(const TopoDS_Face& face)
 {
@@ -242,10 +238,10 @@ Bore describeBore(const TopoDS_Face& face)
         throw Base::ValueError("Select an internal hole wall.");
     }
     const auto start = cylinder.Location().Translated(gp_Vec(axis) * first);
-    return {gp_Ax2(start, axis, cylinder.Position().XDirection()), radius, depth};
+    return {TopoShape(), gp_Ax2(start, axis, cylinder.Position().XDirection()), radius, depth};
 }
 
-bool hasPlanarBoreEnds(const TopoDS_Shape& solid, const TopoDS_Face& wall, const Bore& bore)
+bool hasPlanarBoreEnds(const TopoDS_Shape& solid, const TopoDS_Face& wall, Bore& bore)
 {
     TopTools_IndexedDataMapOfShapeListOfShape facesByEdge;
     TopExp::MapShapesAndUniqueAncestors(solid, TopAbs_EDGE, TopAbs_FACE, facesByEdge);
@@ -261,7 +257,8 @@ bool hasPlanarBoreEnds(const TopoDS_Shape& solid, const TopoDS_Face& wall, const
             return false;
         }
         const auto& other = adjacent.First().IsSame(wall) ? adjacent.Last() : adjacent.First();
-        const BRepAdaptor_Surface neighbor(TopoDS::Face(other));
+        const auto neighborFace = TopoDS::Face(other);
+        const BRepAdaptor_Surface neighbor(neighborFace);
         const BRepAdaptor_Curve curve(edge);
         if (neighbor.GetType() != GeomAbs_Plane || curve.GetType() != GeomAbs_Circle
             || !neighbor.Plane().Axis().Direction().IsParallel(bore.start.Direction(), angularTolerance)) {
@@ -269,8 +266,15 @@ bool hasPlanarBoreEnds(const TopoDS_Shape& solid, const TopoDS_Face& wall, const
         }
         const double axial = gp_Vec(bore.start.Location(), curve.Circle().Location())
                                  .Dot(gp_Vec(bore.start.Direction()));
-        atStart |= std::abs(axial) <= holeTolerance;
-        atEnd |= std::abs(axial - bore.depth) <= holeTolerance;
+        const auto center = curve.Circle().Location();
+        if (std::abs(axial) <= holeTolerance) {
+            atStart = true;
+            bore.startOpen = BRepClass_FaceClassifier(neighborFace, center, holeTolerance).State() == TopAbs_OUT;
+        }
+        if (std::abs(axial - bore.depth) <= holeTolerance) {
+            atEnd = true;
+            bore.endOpen = BRepClass_FaceClassifier(neighborFace, center, holeTolerance).State() == TopAbs_OUT;
+        }
     }
     return atStart && atEnd;
 }
@@ -297,7 +301,7 @@ int findResizedWall(const TopoShape& result, const Bore& original, double radius
         if (std::abs(properties.Mass() - 2 * std::numbers::pi * radius * original.depth)
                 <= holeTolerance * (radius + original.depth)
             && properties.CentreOfMass().Distance(center) <= holeTolerance) {
-            const auto resized = describeBore(face);
+            auto resized = describeBore(face);
             if (match || std::abs(resized.depth - original.depth) > holeTolerance
                 || !hasPlanarBoreEnds(shape, face, resized)) {
                 return 0;
@@ -517,20 +521,28 @@ SvenHoleResize::SvenHoleResize()
     Offset.setStatus(App::Property::Hidden, true);
 }
 
+SvenHoleResize::Bore SvenHoleResize::describe(const Feature& source, const char* faceName)
+{
+    TopoShape face;
+    auto solid = copySolidAndFace(source, faceName, face);
+    const auto& wall = TopoDS::Face(face.getShape());
+    auto bore = describeBore(wall);
+    if (!hasPlanarBoreEnds(solid.getShape(), wall, bore)) {
+        throw Base::ValueError("The hole wall must end at two perpendicular planar faces.");
+    }
+    bore.shape = std::move(solid);
+    return bore;
+}
+
 TopoShape SvenHoleResize::calculate(const Feature& source, const char* faceName, double diameter,
                                    int* editedFace)
 {
     if (!std::isfinite(diameter) || diameter <= 2 * holeTolerance) {
         throw Base::ValueError("Enter a positive hole diameter.");
     }
-    TopoShape face;
-    auto solid = copySolidAndFace(source, faceName, face);
+    const auto bore = describe(source, faceName);
+    const auto& solid = bore.shape;
     const auto& base = solid.getShape();
-    const auto& wall = TopoDS::Face(face.getShape());
-    const auto bore = describeBore(wall);
-    if (!hasPlanarBoreEnds(base, wall, bore)) {
-        throw Base::ValueError("The hole wall must end at two perpendicular planar faces.");
-    }
 
     const double radius = diameter / 2;
     const double change = radius - bore.radius;

@@ -31,6 +31,7 @@
 #include "FeatureSketchBased.h"
 
 class Property;
+class TopoDS_Wire;
 
 namespace Base
 {
@@ -137,6 +138,8 @@ public:
     bool isDynamicCounterbore(const std::string& thread, const std::string& holeCutType);
     bool isDynamicCountersink(const std::string& thread, const std::string& holeCutType);
     double getThreadPitch() const;
+    static TopoDS_Wire metricThreadProfile(double majorRadius, double pitch, const gp_Vec& xDir,
+                                         const gp_Vec& zDir, bool tyreProfile = false);
     double getStartOffset() const;
 
     Base::Vector3d guessNormalDirection(const TopoShape& profileshape) const;

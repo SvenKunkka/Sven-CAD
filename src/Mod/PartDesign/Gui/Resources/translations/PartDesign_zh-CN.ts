@@ -4919,6 +4919,30 @@ over 90: larger hole radius at the bottom</source>
   <context>
     <name>CmdPartDesignExternalThread</name>
     <message>
+      <source>Internal Thread</source>
+      <translation>内螺纹</translation>
+    </message>
+    <message>
+      <source>Internal Thread %1</source>
+      <translation>内螺纹 %1</translation>
+    </message>
+    <message>
+      <source>Create a metric thread on an existing cylindrical hole wall</source>
+      <translation>在已有圆柱孔壁上创建公制内螺纹</translation>
+    </message>
+    <message>
+      <source>Start at the opposite opening</source>
+      <translation>从另一端孔口开始</translation>
+    </message>
+    <message>
+      <source>Clear the checkbox to keep the original bore geometry and save the thread parameters.</source>
+      <translation>取消勾选后保留原孔形状，并保存螺纹参数。</translation>
+    </message>
+    <message>
+      <source>Choose the nominal size that matches the bore diameter.</source>
+      <translation>请选择与底孔直径匹配的公称规格。</translation>
+    </message>
+    <message>
       <source>Manufacturing class</source>
       <translation>加工公差等级</translation>
     </message>
@@ -5040,6 +5064,46 @@ over 90: larger hole radius at the bottom</source>
     <message>
       <source>The geometry kernel could not build the external thread.</source>
       <translation>几何内核未能生成外螺纹。</translation>
+    </message>
+    <message>
+      <source>The geometry kernel could not build the internal thread.</source>
+      <translation>几何内核未能生成内螺纹。</translation>
+    </message>
+    <message>
+      <source>Select one internal cylindrical hole wall.</source>
+      <translation>请选择一个内圆柱孔壁。</translation>
+    </message>
+    <message>
+      <source>Select one internal cylindrical wall in the same part.</source>
+      <translation>请选择同一零件内的一个内圆柱孔壁。</translation>
+    </message>
+    <message>
+      <source>The internal thread groove could not be built.</source>
+      <translation>无法生成内螺纹牙槽。</translation>
+    </message>
+    <message>
+      <source>The hole must have an open end.</source>
+      <translation>孔至少需要一个开口。</translation>
+    </message>
+    <message>
+      <source>The bore diameter must fit the 6H minor diameter range for M2, M2.5, M3, or M4.</source>
+      <translation>底孔直径须落在 M2、M2.5、M3 或 M4 对应的 6H 小径范围内。</translation>
+    </message>
+    <message>
+      <source>The selected size does not match the bore diameter.</source>
+      <translation>所选规格与底孔直径不符。</translation>
+    </message>
+    <message>
+      <source>Only a through hole can use the opposite opening.</source>
+      <translation>通孔可以从另一端孔口开始。</translation>
+    </message>
+    <message>
+      <source>The thread groove would break through the hole wall or intersect nearby geometry.</source>
+      <translation>牙槽会打穿孔壁或切入相邻几何。</translation>
+    </message>
+    <message>
+      <source>The thread could not be added.</source>
+      <translation>无法添加螺纹特征。</translation>
     </message>
     <message>
       <source>Select one exterior cylindrical face of a solid.</source>

@@ -430,6 +430,7 @@ Gui::MenuItem* Workbench::setupMenuBar() const
                   << "PartDesign_Hole"
 #ifdef FREECAD_PERSONAL_CAD
                   << "PartDesign_ExternalThread"
+                  << "PartDesign_InternalThread"
 #endif
                   << "PartDesign_Groove"
                   << "PartDesign_SubtractiveLoft"
@@ -529,6 +530,7 @@ Gui::ToolBarItem* Workbench::setupToolBars() const
           << "PartDesign_Hole"
 #ifdef FREECAD_PERSONAL_CAD
           << "PartDesign_ExternalThread"
+          << "PartDesign_InternalThread"
 #endif
           << "PartDesign_Groove"
           << "PartDesign_SubtractiveLoft"

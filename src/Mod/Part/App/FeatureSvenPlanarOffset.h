@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <gp_Ax2.hxx>
+
 #include <App/PropertyUnits.h>
 #include <App/PropertyStandard.h>
 
@@ -43,6 +45,17 @@ public:
 
     App::PropertyLength Diameter;
 
+    struct Bore
+    {
+        TopoShape shape;
+        gp_Ax2 start;
+        double radius;
+        double depth;
+        bool startOpen = false;
+        bool endOpen = false;
+    };
+
+    static Bore describe(const Feature& source, const char* faceName);
     static TopoShape calculate(const Feature& source, const char* faceName, double diameter,
                                int* editedFace = nullptr);
     short mustExecute() const override;

@@ -45,6 +45,7 @@
 #include "FeatureHole.h"
 #ifdef FREECAD_PERSONAL_CAD
 #include "FeatureExternalThread.h"
+#include "FeatureInternalThread.h"
 #endif
 #include "FeatureCircularPattern.h"
 #include "FeatureLinearPattern.h"
@@ -117,6 +118,7 @@ PyMOD_INIT_FUNC(_PartDesign)
     PartDesign::Hole                        ::init();
 #ifdef FREECAD_PERSONAL_CAD
     PartDesign::ExternalThread              ::init();
+    PartDesign::InternalThread              ::init();
 #endif
     PartDesign::Body                        ::init();
     PartDesign::FeatureExtrude              ::init();

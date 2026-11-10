@@ -148,7 +148,10 @@ SET(PartDesign_SRCS
 add_library(PartDesign SHARED ${PartDesign_SRCS})
 
 if(FREECAD_PERSONAL_CAD)
-    target_sources(PartDesign PRIVATE FeatureExternalThread.cpp FeatureExternalThread.h)
+    target_sources(PartDesign PRIVATE
+        FeatureExternalThread.cpp FeatureExternalThread.h
+        FeatureInternalThread.cpp FeatureInternalThread.h
+    )
 endif()
 target_include_directories(
     PartDesign

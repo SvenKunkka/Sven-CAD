@@ -44,6 +44,7 @@ public:
     static constexpr int MaxModeledTurns = 64;
     static Shaft describe(const Part::Feature& source, const char* faceName);
     static double pitchForSize(int size);
+    static double majorDiameterForSize(int size);
     static Part::TopoShape makeShape(
         const Shaft& shaft,
         int size,

@@ -249,6 +249,11 @@ double ExternalThread::pitchForSize(int size)
     return nominal(size).pitch;
 }
 
+double ExternalThread::majorDiameterForSize(int size)
+{
+    return nominal(size).diameter;
+}
+
 Part::TopoShape ExternalThread::makeShape(
     const Shaft& shaft, int size, double length, bool leftHanded, bool modeled
 )

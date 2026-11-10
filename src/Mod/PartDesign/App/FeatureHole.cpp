@@ -2350,6 +2350,34 @@ std::vector<gp_Pnt> Hole::getHoleLocations() const
     return _holeLocations;
 }
 
+TopoDS_Wire Hole::metricThreadProfile(double majorRadius, double pitch, const gp_Vec& xDir,
+                                      const gp_Vec& zDir, bool tyreProfile)
+{
+    constexpr double marginZ = 0.001;
+    const double height = sqrt(3) / 2 * pitch;
+    const double h = 7 * height / 8;
+    // Trim the nominal crest and leave clearance at the base for the bore.
+    const double marginX = std::tan(Base::toRadians(60.0)) * marginZ;
+    const auto p1 = toPnt((majorRadius - h + marginX) * xDir + marginZ * zDir);
+    const auto p2 = toPnt(majorRadius * xDir + 7 * pitch / 16 * zDir);
+    const auto p3 = toPnt(majorRadius * xDir + 9 * pitch / 16 * zDir);
+    const auto p4 = toPnt((majorRadius - h + marginX) * xDir + (pitch - marginZ) * zDir);
+
+    BRepBuilderAPI_MakeWire wire;
+    wire.Add(BRepBuilderAPI_MakeEdge(p1, p2).Edge());
+    if (tyreProfile) {
+        const auto crest = toPnt((majorRadius + pitch / 32) * xDir + pitch / 2 * zDir);
+        Handle(Geom_TrimmedCurve) arc = GC_MakeArcOfCircle(p2, crest, p3).Value();
+        wire.Add(BRepBuilderAPI_MakeEdge(arc).Edge());
+    }
+    else {
+        wire.Add(BRepBuilderAPI_MakeEdge(p2, p3).Edge());
+    }
+    wire.Add(BRepBuilderAPI_MakeEdge(p3, p4).Edge());
+    wire.Add(BRepBuilderAPI_MakeEdge(p4, p1).Edge());
+    return wire.Wire();
+}
+
 TopoDS_Shape Hole::makeThread(const gp_Vec& xDir, const gp_Vec& zDir, double length)
 {
     int threadType = ThreadType.getValue();
@@ -2416,36 +2444,7 @@ TopoDS_Shape Hole::makeThread(const gp_Vec& xDir, const gp_Vec& zDir, double len
         mkThreadWire.Add(BRepBuilderAPI_MakeEdge(p4, p1).Edge());
     }
     else {
-        H = sqrt(3) / 2 * Pitch;  // height of fundamental triangle
-        double h = 7 * H / 8;     // distance from Rmaj to the base
-        // construct the cross section going counter-clockwise
-        // pitch
-        // --------------
-        // P     | p4
-        // 9/16P |                p3
-        // 7/16P |                p2
-        // 0     | p1
-        // --------------
-        //       | base-sharpV    Rmaj
-
-        // the little adjustment of p1 and p4 is here to prevent coincidencies
-        double marginX = std::tan(Base::toRadians(60.0)) * marginZ;
-        gp_Pnt p1 = toPnt((RmajC - h + marginX) * xDir + marginZ * zDir);
-        gp_Pnt p2 = toPnt((RmajC)*xDir + 7 * Pitch / 16 * zDir);
-        gp_Pnt p3 = toPnt((RmajC)*xDir + 9 * Pitch / 16 * zDir);
-        gp_Pnt p4 = toPnt((RmajC - h + marginX) * xDir + (Pitch - marginZ) * zDir);
-
-        mkThreadWire.Add(BRepBuilderAPI_MakeEdge(p1, p2).Edge());
-        if (threadTypeStr == "ISOTyre") {
-            gp_Pnt crest = toPnt((RmajC + (Pitch / 32)) * xDir + Pitch / 2 * zDir);
-            Handle(Geom_TrimmedCurve) arc1 = GC_MakeArcOfCircle(p2, crest, p3).Value();
-            mkThreadWire.Add(BRepBuilderAPI_MakeEdge(arc1).Edge());
-        }
-        else {
-            mkThreadWire.Add(BRepBuilderAPI_MakeEdge(p2, p3).Edge());
-        }
-        mkThreadWire.Add(BRepBuilderAPI_MakeEdge(p3, p4).Edge());
-        mkThreadWire.Add(BRepBuilderAPI_MakeEdge(p4, p1).Edge());
+        mkThreadWire.Add(metricThreadProfile(RmajC, Pitch, xDir, zDir, threadTypeStr == "ISOTyre"));
     }
 
     mkThreadWire.Build();

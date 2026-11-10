@@ -2,6 +2,7 @@
 """Stage a fresh local macOS app from the locked runtime and a CMake install receipt."""
 
 import argparse
+import ctypes
 import hashlib
 import json
 import os
@@ -54,6 +55,10 @@ MACHO_MAGIC = {
     b"\xcf\xfa\xed\xfe", b"\xfe\xed\xfa\xcf", b"\xca\xfe\xba\xbe",
     b"\xbe\xba\xfe\xca", b"\xca\xfe\xba\xbf", b"\xbf\xba\xfe\xca",
 }
+CLONE_FILE = getattr(ctypes.CDLL(None), "clonefile", None)
+if CLONE_FILE is not None:
+    CLONE_FILE.argtypes = (ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int)
+    CLONE_FILE.restype = ctypes.c_int
 
 
 def run(*args):
@@ -179,6 +184,9 @@ def install_receipt(personal):
 
 def copy_file(source, destination):
     destination.parent.mkdir(parents=True, exist_ok=True)
+    if CLONE_FILE is not None and not source.is_symlink():
+        if CLONE_FILE(os.fsencode(source), os.fsencode(destination), 0) == 0:
+            return
     shutil.copy2(source, destination, follow_symlinks=False)
 
 

@@ -158,6 +158,12 @@ public:
         update.start(0);
     }
 
+    QHash<QByteArray, QString> commandKeywords()
+    {
+        refresh();
+        return isHidden() ? QHash<QByteArray, QString>() : keywords;
+    }
+
 protected:
     void changeEvent(QEvent* event) override
     {
@@ -290,6 +296,9 @@ private:
         if (!command || !command->allowedByMaturity()) {
             return;
         }
+        keywords.insert(spec.command, QStringLiteral("%1 %2").arg(
+            QString::fromUtf8(spec.label.en), QString::fromUtf8(spec.label.zh)
+        ));
         command->initAction();
         auto* action = command->getAction()->action();
         auto* button = new QToolButton(row.parentWidget());
@@ -327,6 +336,9 @@ private:
         auto append = [&](const char* name) {
             if (auto* command = app.commandManager().getCommandByName(name);
                 command && command->allowedByMaturity()) {
+                if (!keywords.contains(name)) {
+                    keywords.insert(name, {});
+                }
                 command->addTo(menu);
             }
         };
@@ -371,6 +383,7 @@ private:
     QToolButton* workspace;
     QTabBar* tabs;
     QScrollArea* scroll;
+    QHash<QByteArray, QString> keywords;
     QTimer update;
     fastsignals::scoped_connection inEdit;
     fastsignals::scoped_connection resetEdit;
@@ -388,6 +401,7 @@ private:
 
 void DesignToolbar::rebuildGroups(int tab)
 {
+    keywords.clear();
     if (auto* old = scroll->takeWidget()) {
         old->deleteLater();
     }
@@ -542,6 +556,15 @@ void DesignToolbar::rebuildGroups(int tab)
 bool usesPersonalCadDesignToolbar(std::string_view workbench)
 {
     return designTab(workbench) >= 0;
+}
+
+QHash<QByteArray, QString> personalCadDesignCommandKeywords(MainWindow& window)
+{
+    auto* toolbar = window.findChild<QToolBar*>(QStringLiteral("PersonalCadDesignToolbar"));
+    if (auto* design = dynamic_cast<DesignToolbar*>(toolbar)) {
+        return design->commandKeywords();
+    }
+    return {};
 }
 
 void installPersonalCadDesignToolbar(MainWindow& window, Application& app)

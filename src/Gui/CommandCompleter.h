@@ -24,6 +24,8 @@
 
 #include <FCGlobal.h>
 #include <QCompleter>
+#include <QHash>
+#include <optional>
 
 class QLineEdit;
 
@@ -41,7 +43,10 @@ class GuiExport CommandCompleter: public QCompleter
 {
     Q_OBJECT
 public:
-    explicit CommandCompleter(QLineEdit* edit, QObject* parent = nullptr);
+    using CommandScope = QHash<QByteArray, QString>;
+    explicit CommandCompleter(
+        QLineEdit* edit, QObject* parent = nullptr, std::optional<CommandScope> scope = std::nullopt
+    );
 
 Q_SIGNALS:
     /// Triggered when a command is selected in the completer
@@ -53,6 +58,9 @@ protected Q_SLOTS:
 
 protected:
     bool eventFilter(QObject*, QEvent* ev) override;
+
+private:
+    bool scoped;
 };
 
 }  // namespace Gui

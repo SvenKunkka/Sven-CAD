@@ -3,7 +3,9 @@
 #include "PersonalCadCommands.h"
 
 #include <algorithm>
+#include <memory>
 #include <string>
+#include <string_view>
 
 #include <QCoreApplication>
 #include <QDialog>
@@ -15,6 +17,7 @@
 
 #include <App/Document.h>
 #include <App/DocumentObject.h>
+#include <App/DocumentObserver.h>
 #include <App/GeoFeatureGroupExtension.h>
 
 #include "Action.h"
@@ -25,8 +28,10 @@
 #include "Document.h"
 #include "MDIView.h"
 #include "MainWindow.h"
+#include "PersonalCadDesignToolbar.h"
 #include "Selection/Selection.h"
 #include "ViewProviderDocumentObject.h"
+#include "Workbench.h"
 #include "WorkbenchManager.h"
 
 namespace Gui
@@ -35,7 +40,9 @@ namespace
 {
 
 constexpr const char* extrudeId = "PersonalCAD_Extrude";
+constexpr const char* pressPullId = "PersonalCAD_PressPull";
 constexpr const char* toolboxId = "PersonalCAD_ModelToolbox";
+constexpr const char* recentEditId = "Part_SvenAdjustLastFaceEdit";
 
 bool isObjectType(const App::DocumentObject* object, const char* typeName)
 {
@@ -71,6 +78,106 @@ bool canExtrude(Document* document)
         return sketchInEdit(document) != nullptr;
     }
     return !Control().activeDialog();
+}
+
+bool selectsEdges(const std::vector<std::string>& elements)
+{
+    return !elements.empty() && std::ranges::all_of(elements, [](const std::string& element) {
+        return element.starts_with("Edge");
+    });
+}
+
+QString pressPullSearchTerms(Document* document)
+{
+    if (sketchInEdit(document)) {
+        return QStringLiteral("推拉 拉伸 轮廓 Extrude Profile");
+    }
+    const auto selection = Selection().getSelectionEx();
+    if (selection.size() == 1) {
+        const auto& selected = selection.front();
+        const auto& elements = selected.getSubNames();
+        if (isObjectType(selected.getObject(), "Part::Part2DObject")) {
+            return QStringLiteral("推拉 拉伸 轮廓 Extrude Profile");
+        }
+        if (selectsEdges(elements)) {
+            return QStringLiteral("推拉 圆角 Fillet Edge");
+        }
+        if (elements.size() == 1 && elements.front().starts_with("Face")
+            && selected.getObject()
+            && selected.getObject()->getTypeId() == Base::Type::fromName("Part::Feature")) {
+            return QStringLiteral("推拉 平面偏移 孔径 改径 Offset Face Resize Hole");
+        }
+        return {};
+    }
+    const auto references = Selection().getSelectionT(nullptr, ResolveMode::NoResolve);
+    const bool reselect = references.size() == 2
+        && std::ranges::any_of(references, [](const App::SubObjectT& reference) {
+            return !reference.hasSubElement()
+                && isObjectType(reference.getSubObject(), "Part::SvenPlanarOffset");
+        })
+        && std::ranges::any_of(references, [](const App::SubObjectT& reference) {
+            return reference.getOldElementName() == "Face"
+                && isObjectType(reference.getSubObject(), "Part::Feature");
+        });
+    return reselect ? QStringLiteral("推拉 重新选面 Reselect Face") : QString();
+}
+
+bool commandAvailable(Command* command)
+{
+    if (!command || !command->allowedByMaturity()) {
+        return false;
+    }
+    command->initAction();
+    command->testActive();
+    const auto* action = command->getAction();
+    return action && action->isEnabled();
+}
+
+CommandCompleter::CommandScope toolboxScope(MainWindow& window, Document* document)
+{
+    auto commands = personalCadDesignCommandKeywords(window);
+    if (auto* workbench = WorkbenchManager::instance()->active()) {
+        for (const auto& toolbar : workbench->getToolbarItems()) {
+            for (const auto& name : toolbar.second) {
+                const auto id = QByteArray::fromStdString(name);
+                if (!commands.contains(id)) {
+                    commands.insert(id, {});
+                }
+            }
+        }
+    }
+    const bool editingSketch = sketchInEdit(document);
+    if (editingSketch) {
+        const auto& registered = Application::Instance->commandManager().getCommands();
+        for (const auto& [name, command] : registered) {
+            const QByteArray id(command->getName());
+            if (id.startsWith("Sketcher_") && !commands.contains(id)) {
+                commands.insert(id, {});
+            }
+        }
+    }
+    commands[extrudeId] += QStringLiteral(" 拉伸 挤出 Pad");
+    const auto pressPullTerms = pressPullSearchTerms(document);
+    if (!pressPullTerms.isEmpty()) {
+        commands[pressPullId] = pressPullTerms;
+    }
+    commands[recentEditId] = QStringLiteral(" 最近参数 调整上次操作 Adjust Last Operation Edit Last Q");
+    commands.remove(toolboxId);
+    auto& manager = Application::Instance->commandManager();
+    for (auto it = commands.begin(); it != commands.end();) {
+        const auto& id = it.key();
+        const bool allowedInSketch = id.startsWith("Sketcher_") || id.startsWith("PersonalCAD_Sketch")
+            || id.startsWith("Std_View") || id == extrudeId || id == pressPullId;
+        if ((editingSketch && !allowedInSketch)
+            || (id == pressPullId && pressPullTerms.isEmpty())
+            || !commandAvailable(manager.getCommandByName(id))) {
+            it = commands.erase(it);
+        }
+        else {
+            ++it;
+        }
+    }
+    return commands;
 }
 
 Command* nativeCommand(const char* id, const char* workbench)
@@ -186,7 +293,7 @@ class PressPullCommand: public ModelingCommand
 public:
     PressPullCommand()
         : ModelingCommand(
-              "PersonalCAD_PressPull",
+              pressPullId,
               QT_TRANSLATE_NOOP("PersonalCadCommands", "Press Pull"),
               QT_TRANSLATE_NOOP("PersonalCadCommands", "Extrudes profiles, fillets edges, offsets planar faces, or resizes cylindrical holes"),
               "Part_Extrude"
@@ -219,9 +326,7 @@ protected:
             }
 
             const auto& elements = selected.getSubNames();
-            if (!elements.empty() && std::ranges::all_of(elements, [](const std::string& element) {
-                    return element.starts_with("Edge");
-                })) {
+            if (selectsEdges(elements)) {
                 auto* body = findBody(object);
                 auto* command = body ? nativeCommand("PartDesign_Fillet", "PartDesignWorkbench")
                                      : nativeCommand("Part_Fillet", "PartWorkbench");
@@ -288,6 +393,9 @@ protected:
     void activated(int) override
     {
         auto* mainWindow = getMainWindow();
+        const auto document = std::make_shared<App::DocumentWeakPtrT>(getActiveDocument());
+        const auto workbench = WorkbenchManager::instance()->activeName();
+        auto scope = toolboxScope(*mainWindow, getActiveGuiDocument());
         auto* dialog = new QDialog(mainWindow);
         dialog->setObjectName(QStringLiteral("PersonalCadModelToolbox"));
         dialog->setAttribute(Qt::WA_DeleteOnClose);
@@ -299,23 +407,23 @@ protected:
         search->setAccessibleName(prompt);
         search->setMinimumWidth(360);
         layout->addWidget(search);
-        auto* completer = new CommandCompleter(search, search);
+        auto* completer = new CommandCompleter(search, search, std::move(scope));
         QObject::connect(completer, &CommandCompleter::commandActivated, dialog,
-                         [dialog, mainWindow](const QByteArray& id) {
+                         [dialog, mainWindow, document, workbench](const QByteArray& id) {
             if (id.isEmpty() || id == toolboxId) {
                 return;
             }
             dialog->accept();
-            QTimer::singleShot(0, mainWindow, [id] {
+            QTimer::singleShot(0, mainWindow, [id, document, workbench] {
                 auto& manager = Application::Instance->commandManager();
                 auto* command = manager.getCommandByName(id.constData());
-                if (command && command->allowedByMaturity()) {
-                    command->initAction();
-                    command->testActive();
-                    if (command->getAction()->isEnabled()) {
-                        command->invoke(0);
-                        return;
-                    }
+                auto* active = Application::Instance->activeDocument();
+                if (**document == (active ? active->getDocument() : nullptr)
+                    && workbench == WorkbenchManager::instance()->activeName()
+                    && (id != pressPullId || !pressPullSearchTerms(active).isEmpty())
+                    && commandAvailable(command)) {
+                    command->invoke(0);
+                    return;
                 }
                 getMainWindow()->showMessage(
                     QCoreApplication::translate("PersonalCadCommands", "Command unavailable in the current context"),

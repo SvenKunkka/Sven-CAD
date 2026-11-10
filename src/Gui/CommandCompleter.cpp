@@ -46,15 +46,19 @@ struct CmdInfo
 std::vector<CmdInfo> _Commands;
 int _CommandRevision;
 const int CommandNameRole = Qt::UserRole;
+const int SearchTextRole = Qt::UserRole + 1;
 bool _ShortcutSignalConnected = false;
 
 class CommandModel: public QAbstractItemModel
 {
     int revision = 0;
+    std::optional<CommandCompleter::CommandScope> scope;
+    mutable std::vector<CmdInfo> visibleCommands;
 
 public:
-    explicit CommandModel(QObject* parent)
+    explicit CommandModel(QObject* parent, std::optional<CommandCompleter::CommandScope> commands)
         : QAbstractItemModel(parent)
+        , scope(std::move(commands))
     {
         update();
         if (!_ShortcutSignalConnected) {
@@ -83,6 +87,14 @@ public:
                 info.cmd = v.second;
             }
         }
+        if (scope) {
+            visibleCommands.clear();
+            for (const auto& info : _Commands) {
+                if (scope->contains(info.cmd->getName())) {
+                    visibleCommands.push_back(info);
+                }
+            }
+        }
         endResetModel();
     }
 
@@ -93,15 +105,16 @@ public:
 
     QVariant data(const QModelIndex& index, int role) const override
     {
-        if (index.row() < 0 || index.row() >= (int)_Commands.size()) {
+        if (index.row() < 0 || index.row() >= rowCount({})) {
             return {};
         }
 
-        auto& info = _Commands[index.row()];
+        auto& info = scope ? visibleCommands[index.row()] : _Commands[index.row()];
 
         switch (role) {
             case Qt::DisplayRole:
-            case Qt::EditRole: {
+            case Qt::EditRole:
+            case SearchTextRole: {
                 QString title = QStringLiteral("%1 (%2)").arg(
                     Action::commandMenuText(info.cmd),
                     QString::fromUtf8(info.cmd->getName())
@@ -109,6 +122,12 @@ public:
                 QString shortcut = info.cmd->getShortcut();
                 if (!shortcut.isEmpty()) {
                     title += QStringLiteral(" (%1)").arg(shortcut);
+                }
+                if (role == SearchTextRole && scope) {
+                    title += QStringLiteral(" %1 %2").arg(
+                        QString::fromUtf8(info.cmd->getMenuText() ? info.cmd->getMenuText() : ""),
+                        scope->value(info.cmd->getName())
+                    );
                 }
                 return title;
             }
@@ -140,7 +159,7 @@ public:
 
     int rowCount(const QModelIndex&) const override
     {
-        return (int)(_Commands.size());
+        return static_cast<int>(scope ? visibleCommands.size() : _Commands.size());
     }
 
     int columnCount(const QModelIndex&) const override
@@ -153,10 +172,16 @@ public:
 
 // --------------------------------------------------------------------
 
-CommandCompleter::CommandCompleter(QLineEdit* lineedit, QObject* parent)
+CommandCompleter::CommandCompleter(
+    QLineEdit* lineedit, QObject* parent, std::optional<CommandScope> scope
+)
     : QCompleter(parent)
+    , scoped(scope.has_value())
 {
-    this->setModel(new CommandModel(this));
+    this->setModel(new CommandModel(this, std::move(scope)));
+    if (scoped) {
+        this->setCompletionRole(SearchTextRole);
+    }
     this->setFilterMode(Qt::MatchContains);
     this->setCaseSensitivity(Qt::CaseInsensitive);
     this->setCompletionMode(QCompleter::PopupCompletion);
@@ -168,7 +193,9 @@ CommandCompleter::CommandCompleter(QLineEdit* lineedit, QObject* parent)
         this,
         &CommandCompleter::onCommandActivated
     );
-    connect(this, qOverload<const QString&>(&CommandCompleter::highlighted), lineedit, &QLineEdit::setText);
+    if (!scoped) {
+        connect(this, qOverload<const QString&>(&CommandCompleter::highlighted), lineedit, &QLineEdit::setText);
+    }
 }
 
 bool CommandCompleter::eventFilter(QObject* o, QEvent* ev)
@@ -209,10 +236,10 @@ bool CommandCompleter::eventFilter(QObject* o, QEvent* ev)
             case Qt::Key_Return:
                 if (o == this->widget()) {
                     auto index = currentIndex();
-                    if (index.isValid()) {
+                    if (index.isValid() && (!scoped || popup()->isVisible())) {
                         onCommandActivated(index);
                     }
-                    else {
+                    else if (!scoped || !completionPrefix().isEmpty()) {
                         complete();
                     }
                     ev->setAccepted(true);
@@ -233,15 +260,20 @@ void CommandCompleter::onCommandActivated(const QModelIndex& index)
 
 void CommandCompleter::onTextChanged(const QString& txt)
 {
-    // Do not activate completer if less than 3 characters for better
-    // performance.
-    if (txt.size() < 3 || !widget()) {
+    const auto query = scoped ? txt.trimmed() : txt;
+    if (scoped && query.isEmpty()) {
+        setCompletionPrefix(QString());
+        popup()->hide();
+        return;
+    }
+    // The unscoped keyboard preferences search still waits for three characters.
+    if ((!scoped && query.size() < 3) || !widget()) {
         return;
     }
 
     static_cast<CommandModel*>(this->model())->update();
 
-    this->setCompletionPrefix(txt);
+    this->setCompletionPrefix(query);
     QRect rect = widget()->rect();
     if (rect.width() < 300) {
         rect.setWidth(300);

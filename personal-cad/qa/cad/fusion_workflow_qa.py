@@ -84,6 +84,29 @@ def run_macro():
         wait(350)
         return viewport
 
+    def search_toolbox(query):
+        press(key.Key_S)
+        toolbox = widget(window, QtWidgets.QDialog, "PersonalCadModelToolbox")
+        require(toolbox.isVisible(), "S did not open the model toolbox")
+        field = toolbox.findChild(QtWidgets.QLineEdit)
+        QtWidgets.QApplication.setActiveWindow(toolbox)
+        field.setFocus()
+        # Simulate the text delivered by an input method for Chinese queries.
+        field.setText(query)
+        field.textEdited.emit(query)
+        wait(130)
+        model = field.findChild(QtWidgets.QCompleter).completionModel()
+        matches = {bytes(model.data(model.index(i, 0), QtCore.Qt.ItemDataRole.UserRole)).decode():
+                   model.data(model.index(i, 0)) for i in range(model.rowCount())}
+        return toolbox, field, matches
+
+    def verify_search(query, expected, available=True):
+        toolbox, _, matches = search_toolbox(query)
+        toolbox.reject()
+        wait(120)
+        require((expected in matches) == available, f"Unexpected search results for {query}: {matches}")
+        return matches.get(expected, "")
+
     def switch(tabs, index):
         require(tabs.isTabVisible(index), f"Expected visible design tab {index}")
         QtTest.QTest.mouseClick(tabs, left, pos=tabs.tabRect(index).center())
@@ -173,6 +196,10 @@ def run_macro():
         require(assembly.ViewObject.isInEditMode(), "Assembly did not enter its editing mode")
         original_objects = {obj.Name for obj in assembly_doc.Objects}
         Gui.Selection.clearSelection()
+        require("(J)" in verify_search("联接", "PersonalCAD_Joint"),
+                "The assembly search did not display the joint shortcut")
+        verify_search("填补", "Surface_Filling", available=False)
+        checks["S_assembly_context"] = True
         press(key.Key_J)
         joint_type = widget(window, QtWidgets.QComboBox, "jointType")
         require(Gui.Control.activeDialog() and joint_type.isVisible() and joint_type.count() > 1,
@@ -189,12 +216,16 @@ def run_macro():
         return (tuple(obj.Name for obj in doc.Objects), doc.UndoCount, doc.RedoCount,
                 source.ViewObject.Visibility, source.Shape.exportBrepToString())
 
-    def try_face_edit(doc, source, face_index, distance, valid, apply=False, actual_shortcut=False, rebind=None):
+    def try_face_edit(doc, source, face_index, distance, valid, apply=False, actual_shortcut=False,
+                      rebind=None, recent_value=None):
         from pivy import coin
 
         group = source.getParentGeoFeatureGroup()
         path = f"{source.Name}.Face{face_index}" if group else f"Face{face_index}"
-        select(doc.Name, group.Name if group else source.Name, path)
+        if recent_value is None:
+            select(doc.Name, group.Name if group else source.Name, path)
+        else:
+            Gui.Selection.clearSelection()
         if rebind:
             Gui.Selection.addSelection(doc.Name, rebind.Name)
         initial = face_edit_state(doc, source)
@@ -216,6 +247,9 @@ def run_macro():
             poll.stop()
             try:
                 spin = widget(dialog, QtWidgets.QDoubleSpinBox, "SvenPlanarOffsetDistance")
+                if recent_value is not None:
+                    require(math.isclose(spin.value(), recent_value, abs_tol=1e-6),
+                            "Recent Q dialog did not load the existing parameter")
                 buttons = dialog.findChild(QtWidgets.QDialogButtonBox)
                 ok = buttons.button(QtWidgets.QDialogButtonBox.StandardButton.Ok)
                 spin.setValue(distance)
@@ -235,7 +269,14 @@ def run_macro():
 
         poll.timeout.connect(inspect)
         poll.start(30)
-        if actual_shortcut:
+        if recent_value is not None:
+            _, field, matches = search_toolbox("调整上次操作")
+            require("Part_SvenAdjustLastFaceEdit" in matches, f"Missing recent operation: {matches}")
+            QtTest.QTest.keyClick(field, key.Key_Return)
+            wait(350)
+            require(not any(palette.isVisible() for palette in window.findChildren(
+                QtWidgets.QDialog, "PersonalCadModelToolbox")), "Enter did not close the search palette")
+        elif actual_shortcut:
             press(key.Key_Q)
         else:
             Gui.runCommand("PersonalCAD_PressPull")
@@ -273,6 +314,14 @@ def run_macro():
         view = Gui.activeDocument().activeView()
         view.fitAll()
 
+        Gui.Selection.clearSelection()
+        verify_search("孔径", "PersonalCAD_PressPull", available=False)
+        select(doc.Name, group.Name, f"{source.Name}.Face{top}")
+        require("(Q)" in verify_search("平面偏移", "PersonalCAD_PressPull"),
+                "Chinese search did not display the Q shortcut")
+        verify_search("Offset Face", "PersonalCAD_PressPull")
+        checks["S_STEP_selection_bilingual_search"] = True
+
         try_face_edit(doc, source, top, 2, valid=True, actual_shortcut=True)
         try_face_edit(doc, source, top, -1.5, valid=True)
         try_face_edit(doc, source, top, -6, valid=False)
@@ -301,6 +350,25 @@ def run_macro():
                 "Offset did not retain the moved face color at its expected location")
         require(doc.UndoCount == original[1] + 1 and not source.ViewObject.Visibility,
                 "Offset did not commit exactly one undo entry and hide its source")
+        other = App.newDocument("RecentQOtherDocument")
+        verify_search("调整上次操作", "Part_SvenAdjustLastFaceEdit", available=False)
+        require(not other.Objects, "Recent parameters changed the other document")
+        App.closeDocument(other.Name)
+        App.setActiveDocument(doc.Name)
+        wait(250)
+        edit_undo_count = doc.UndoCount
+        support_id = result.SupportIdentity
+        try_face_edit(doc, source, top, 2, valid=True, recent_value=1.25)
+        require(math.isclose(result.Offset.Value, 1.25, abs_tol=1e-6), "Cancel changed the Q feature")
+        try_face_edit(doc, source, top, 2, valid=True, apply=True, recent_value=1.25)
+        require(result.SupportIdentity == support_id and doc.getObject(result_name) == result
+                and doc.UndoCount == edit_undo_count + 1
+                and math.isclose(result.Offset.Value, 2, abs_tol=1e-6)
+                and math.isclose(result.Shape.Volume, original_volume + 2 * face_area, abs_tol=1e-5),
+                "Recent Q edit did not update the original feature in one transaction")
+        doc.undo()
+        require(math.isclose(result.Offset.Value, 1.25, abs_tol=1e-6), "Undo did not restore the old offset")
+        checks["S_recent_Q_planar_cancel_adjust_undo_document_switch"] = True
         doc.undo()
         require(doc.getObject(result_name) is None and source.ViewObject.Visibility
                 and source.Shape.exportBrepToString() == original[-1],
@@ -388,6 +456,14 @@ def run_macro():
             measure(result.Shape, diameter, depth, center, direction, expected_volume)
             require(result.getGlobalPlacement().isSame(source.getGlobalPlacement(), 1e-9), "Placement changed")
             require(doc.UndoCount == before[1] + 1, "Resize must create exactly one undo entry")
+            changed_diameter = 4.5 if name == "ThroughHole" else 2.5
+            try_face_edit(doc, source, face_index, changed_diameter, valid=True, apply=True,
+                          recent_value=diameter)
+            changed_volume = original_volume - math.pi * (changed_diameter**2 - 9) * depth / 4
+            measure(result.Shape, changed_diameter, depth, center, direction, changed_volume)
+            require(doc.UndoCount == before[1] + 2, "Adjusting the bore must create one undo entry")
+            doc.undo()
+            measure(result.Shape, diameter, depth, center, direction, expected_volume)
             doc.undo()
             require(doc.getObject(result_name) is None and source.ViewObject.Visibility
                     and source.Shape.exportBrepToString() == before[-1], "Undo failed to restore source")
@@ -409,7 +485,8 @@ def run_macro():
             result.Shape.exportStep(str(step))
             measure(Part.read(str(step)), 4, depth, center, direction, updated)
             checks[name] = {"original_diameter_mm": 3, "new_diameter_mm": diameter, "depth_mm": depth,
-                            "undo_redo_reopen": True, "edited_and_step_roundtrip_diameter_mm": 4}
+                            "undo_redo_reopen": True, "edited_and_step_roundtrip_diameter_mm": 4,
+                            "recent_adjustment_mm": changed_diameter}
             App.closeDocument(doc.Name)
 
         chamfered = Part.makeCylinder(1.5, 8, axis).fuse(
@@ -698,6 +775,10 @@ def run_macro():
                 switch(tabs, index)
                 require(Gui.activeWorkbench().name() == workbench, f"Tab {index} did not activate {workbench}")
                 button(toolbar, expected_button)
+                if index == 1:
+                    verify_search("填补", "Surface_Filling")
+                    verify_search("联接", "PersonalCAD_Joint", available=False)
+                    checks["S_surface_context"] = True
             Gui.activateWorkbench("TechDrawWorkbench")
             wait(200)
             require(not toolbar.isVisible(), "Design ribbon stayed visible in the drawing workspace")
@@ -738,6 +819,11 @@ def run_macro():
                 require(Gui.Command.get(name).getAction()[0].isEnabled(),
                         f"{name} is disabled by the Sketcher task while editing")
             switch(tabs, 3)
+            verify_search("直线", "Sketcher_CreateLine")
+            verify_search("孔径", "PersonalCAD_PressPull", available=False)
+            verify_search("填补", "Surface_Filling", available=False)
+            require(Gui.activeDocument().getInEdit().Object == sketch, "Canceling search left Sketch edit")
+            checks["S_sketch_context"] = True
             print("QA phase: E and Q", file=sys.stderr, flush=True)
             press(key.Key_E)
             pad = active_feature(doc, "PartDesign::Pad")

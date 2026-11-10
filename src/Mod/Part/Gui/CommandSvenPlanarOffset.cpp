@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cmath>
 #include <exception>
+#include <memory>
+#include <unordered_map>
 
 #include <QCoreApplication>
 #include <QDialog>
@@ -25,6 +27,7 @@
 #include <TopoDS.hxx>
 
 #include <App/AutoTransaction.h>
+#include <App/Application.h>
 #include <App/Document.h>
 #include <App/DocumentObserver.h>
 #include <App/GeoFeatureGroupExtension.h>
@@ -48,6 +51,43 @@ namespace
 
 using Part::SvenPlanarOffset;
 using Part::SvenHoleResize;
+
+class RecentFaceEdits
+{
+public:
+    RecentFaceEdits()
+        : deletedDocument(App::GetApplication().signalDeleteDocument.connect(
+              [this](const App::Document& doc) { edits.erase(&doc); }
+          ))
+    {}
+
+    void record(const App::Document& doc, const SvenPlanarOffset& feature, int transactionId)
+    {
+        if (doc.getTransactionID(true) == transactionId) {
+            edits[&doc] = {feature.getID(), transactionId};
+        }
+    }
+
+    SvenPlanarOffset* find(const App::Document* doc) const
+    {
+        const auto entry = edits.find(doc);
+        if (entry == edits.end() || doc->getTransactionID(true) != entry->second.transactionId
+            || doc->hasPendingTransaction() || doc->getBookedTransactionID() != App::NullTransaction) {
+            return nullptr;
+        }
+        auto* edit = freecad_cast<SvenPlanarOffset*>(doc->getObjectByID(entry->second.objectId));
+        return edit && !edit->isError() ? edit : nullptr;
+    }
+
+private:
+    struct Edit
+    {
+        long objectId;
+        int transactionId;
+    };
+    std::unordered_map<const App::Document*, Edit> edits;
+    fastsignals::scoped_connection deletedDocument;
+};
 
 Part::Feature* selectedSource(const App::SubObjectT& selection)
 {
@@ -219,13 +259,17 @@ class CmdSvenPlanarOffset: public Gui::Command
     Q_DECLARE_TR_FUNCTIONS(CmdSvenPlanarOffset)
 
 public:
-    CmdSvenPlanarOffset()
-        : Command("Part_SvenPlanarOffset")
+    CmdSvenPlanarOffset(std::shared_ptr<RecentFaceEdits> recent, bool adjustLast = false)
+        : Command(adjustLast ? "Part_SvenAdjustLastFaceEdit" : "Part_SvenPlanarOffset")
+        , recent(std::move(recent))
+        , adjustLast(adjustLast)
     {
         sAppModule = "Part";
         sGroup = QT_TR_NOOP("Part");
-        sMenuText = QT_TR_NOOP("Offset Planar Face");
-        sToolTipText = QT_TR_NOOP("Offsets a plane or resizes a cylindrical hole on a STEP solid");
+        sMenuText = adjustLast ? QT_TR_NOOP("Adjust Last Q Edit") : QT_TR_NOOP("Offset Planar Face");
+        sToolTipText = adjustLast
+            ? QT_TR_NOOP("Adjust the last committed plane offset or hole resize in this document")
+            : QT_TR_NOOP("Offsets a plane or resizes a cylindrical hole on a STEP solid");
         sStatusTip = sToolTipText;
         sPixmap = "Part_Offset";
         eType = ForEdit;
@@ -239,14 +283,28 @@ public:
 protected:
     bool isActive() override
     {
-        return hasActiveDocument() && !Gui::Control().activeDialog() && !getActiveGuiDocument()->getInEdit();
+        return hasActiveDocument() && !Gui::Control().activeDialog() && !getActiveGuiDocument()->getInEdit()
+            && (!adjustLast || recent->find(getActiveDocument()));
     }
 
     void activated(int) override
     {
-        auto selection = Gui::Selection().getSelectionT(nullptr, Gui::ResolveMode::NoResolve);
-        const App::SubObjectT* selectedFace = nullptr;
+        std::vector<App::SubObjectT> selection;
         SvenPlanarOffset* existing = nullptr;
+        if (adjustLast) {
+            existing = recent->find(getActiveDocument());
+            if (!existing) {
+                return;
+            }
+            const auto faces = existing->Support.getSubValues(true);
+            if (faces.size() == 1 && existing->Support.getValue()) {
+                selection.emplace_back(existing->Support.getValue(), faces.front().c_str());
+            }
+        }
+        else {
+            selection = Gui::Selection().getSelectionT(nullptr, Gui::ResolveMode::NoResolve);
+        }
+        const App::SubObjectT* selectedFace = nullptr;
         if (selection.size() <= 2) {
             for (const auto& entry : selection) {
                 if (selectedSource(entry)) {
@@ -271,12 +329,13 @@ protected:
         auto* view = freecad_cast<PartGui::ViewProviderPartExt*>(
             getActiveGuiDocument()->getViewProvider(source)
         );
-        if (!view || !view->isShow()) {
+        if (!view || (!adjustLast && !view->isShow())) {
             Gui::getMainWindow()->showMessage(tr("Show the source solid before editing its face."), 5000);
             return;
         }
         const auto& reference = *selectedFace;
-        const App::DocumentObjectT edit(existing);
+        const App::DocumentWeakPtrT originalDocument(source->getDocument());
+        const App::DocumentObjectWeakPtrT edit(existing);
         auto face = reference.getNewElementName();
         if (face.empty()) {
             face = reference.getElementName();
@@ -296,7 +355,7 @@ protected:
             Gui::getMainWindow()->showMessage(tr("Select a replacement face of the same type."), 5000);
             return;
         }
-        const auto title = existing ? tr("Reselect Q Support")
+        const auto title = adjustLast ? tr("Adjust Last Q Edit") : existing ? tr("Reselect Q Support")
             : resize ? tr("Resize Cylindrical Hole") : tr("Offset Planar Face");
         QDialog dialog(Gui::getMainWindow());
         dialog.setObjectName(QStringLiteral("SvenPlanarOffsetDialog"));
@@ -400,20 +459,26 @@ protected:
             return;
         }
         removePreview();
-        commit(reference, face, distance->value(), resize, title, edit, existing != nullptr);
+        auto* document = getActiveDocument();
+        if (!document || document != *originalDocument || (existing && !*edit)
+            || (adjustLast && recent->find(document) != *edit)) {
+            Gui::getMainWindow()->showMessage(tr("The source or document changed before confirmation."), 5000);
+            return;
+        }
+        commit(reference, face, distance->value(), resize, title,
+               freecad_cast<SvenPlanarOffset*>(*edit));
     }
 
 private:
     void commit(const App::SubObjectT& reference, const std::string& face, double distance,
-                bool resize, const QString& title, const App::DocumentObjectT& edit, bool rebind)
+                bool resize, const QString& title, SvenPlanarOffset* existing)
     {
         auto* source = selectedSource(reference);
         auto* document = getActiveDocument();
         auto* gui = getActiveGuiDocument();
-        auto* existing = freecad_cast<SvenPlanarOffset*>(edit.getObject());
         if (!source || !gui || source->getDocument() != document || document->hasPendingTransaction()
             || document->getBookedTransactionID() != App::NullTransaction
-            || (rebind && (!existing || existing->Support.getValue() != source))) {
+            || (existing && existing->Support.getValue() != source)) {
             Gui::getMainWindow()->showMessage(tr("The source or document changed before confirmation."), 5000);
             return;
         }
@@ -435,7 +500,9 @@ private:
                     static_cast<App::Part*>(parent)->addObject(result);
                 }
             }
-            result->setSupport(*source, face);
+            if (!adjustLast) {
+                result->setSupport(*source, face);
+            }
             if (resize) {
                 static_cast<SvenHoleResize*>(result)->Diameter.setValue(distance);
             }
@@ -454,17 +521,23 @@ private:
             sourceView->hide();
             resultView->show();
             transaction.close();
+            recent->record(*document, *result, transactionId);
         }
         catch (...) {
             transaction.close(App::TransactionCloseMode::Abort);
             Gui::getMainWindow()->showMessage(tr("The face edit could not be applied."), 5000);
         }
     }
+
+    std::shared_ptr<RecentFaceEdits> recent;
+    bool adjustLast;
 };
 
 }  // namespace
 
 void registerSvenPlanarOffset(Gui::CommandManager& commands)
 {
-    commands.addCommand(new CmdSvenPlanarOffset);
+    auto recent = std::make_shared<RecentFaceEdits>();
+    commands.addCommand(new CmdSvenPlanarOffset(recent));
+    commands.addCommand(new CmdSvenPlanarOffset(std::move(recent), true));
 }

@@ -4,6 +4,14 @@
   <context>
     <name>CmdSvenPlanarOffset</name>
     <message>
+      <source>Adjust Last Q Edit</source>
+      <translation>调整上次 Q 操作</translation>
+    </message>
+    <message>
+      <source>Adjust the last committed plane offset or hole resize in this document</source>
+      <translation>调整当前文档中刚刚提交的平面偏移或孔壁改径</translation>
+    </message>
+    <message>
       <source>Offset Planar Face</source>
       <translation>平面偏移</translation>
     </message>

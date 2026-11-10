@@ -62,10 +62,8 @@ def run_macro():
         doc.recompute()
         return feature
 
-    def phase(shape, radius, z, pitch, azimuth, center=None):
+    def phase(shape, radius, z, pitch, azimuth):
         xy = App.Vector(radius * math.cos(azimuth), radius * math.sin(azimuth), 0)
-        if center is not None:
-            xy += center
         sample_count = 96
         angles = []
         for index in range(sample_count):
@@ -256,6 +254,15 @@ def run_macro():
         doc.recompute()
         return body, sketch
 
+    def groove_centers(shape, center, radius, pitch, azimuth):
+        radial = center + App.Vector(radius * math.cos(azimuth), radius * math.sin(azimuth), 0)
+        line = Part.makeLine(radial + App.Vector(0, 0, 6 - 3.75 * pitch),
+                             radial + App.Vector(0, 0, 6 - 0.5 * pitch))
+        heights = sorted({vertex.Point.z for vertex in shape.section(line).Vertexes})
+        return [(lower + upper) / 2 for lower, upper in zip(heights, heights[1:])
+                if upper - lower > 1e-6
+                and not shape.isInside(radial + App.Vector(0, 0, (lower + upper) / 2), 1e-7, True)]
+
     def check_internal_geometry():
         cases = []
         center = App.Vector(5, 5, 0)
@@ -298,13 +305,15 @@ def run_macro():
                 assert 0 < shape.Volume < basic.Volume and len(shape.Faces) > len(basic.Faces)
                 assert shape.isInside(center + App.Vector(0, 0, 0.5), 1e-7, True) != through
                 radius = (drill + diameter) / 4
-                z = 6 - 2 * pitch
-                first = phase(shape, radius, z, pitch, 0, center)
-                quarter = phase(shape, radius, z, pitch, math.pi / 2, center)
-                repeat = phase(shape, radius, z - pitch, pitch, 0, center)
-                advance = math.remainder(quarter - first, 1)
-                assert abs(advance - (0.25 if handedness == "Right" else -0.25)) < 0.04, (spec, advance)
-                assert abs(math.remainder(repeat - first, 1)) < 0.04
+                # Intersect a line away from the B-Rep seam to measure the actual
+                # groove spacing and its displacement after a quarter rotation.
+                first = groove_centers(shape, center, radius, pitch, math.pi / 7)
+                quarter = groove_centers(shape, center, radius, pitch, math.pi / 7 + math.pi / 2)
+                assert len(first) >= 2 and len(quarter) >= 2, (spec, through, handedness, first, quarter)
+                measured_pitch = first[1] - first[0]
+                advance = math.remainder((quarter[0] - first[0]) / pitch, 1)
+                assert abs(advance - (0.25 if handedness == "Right" else -0.25)) < 0.015, (spec, advance)
+                assert math.isclose(measured_pitch, pitch, abs_tol=0.005), (spec, measured_pitch)
                 if not through:
                     assert math.isclose(hole.ThreadDepth.Value, 4 * pitch, abs_tol=1e-9)
                     assert shape.isInside(center + App.Vector(radius, 0, 1.25), 1e-7, True)
@@ -321,8 +330,11 @@ def run_macro():
                     hole.CosmeticThread = True
                     doc.recompute()
                     assert math.isclose(hole.Shape.Volume, basic.Volume, abs_tol=1e-6)
+                    hole.ThreadType = "None"
+                    assert hole.ThreadPitch.Value == 0 and not hole.ManufacturingLimits
                 cases.append({"spec": spec, "through": through, "hand": handedness,
                               "pitch_mm": pitch, "tap_drill_mm": drill,
+                              "measured_pitch_mm": measured_pitch,
                               "phase_advance_turns": advance, "manufacturing_limits": reference})
                 App.closeDocument(doc.Name)
         checks["internal_blind_through_geometry_and_reopen"] = cases
@@ -351,6 +363,7 @@ def run_macro():
             class_box.setCurrentIndex(class_box.findText("6H"))
             QtTest.QTest.qWait(100)
             assert reference.isVisible() and "D1 2.459–2.599 mm" in reference.text()
+            assert reference.grab().save(str(output / "internal-hole-manufacturing-reference.png"))
             class_box.setCurrentIndex(class_box.findText("5H"))
             QtTest.QTest.qWait(100)
             assert not reference.isVisible()

@@ -1261,12 +1261,6 @@ void Hole::updateDiameterParam()
     if (threadType > 0 && threadSize > 0) {
         ThreadDiameter.setValue(threadDescription[threadType][threadSize].diameter);
     }
-#ifdef FREECAD_PERSONAL_CAD
-    const double pitch = threadType > 0 && threadSize >= 0 ? getThreadPitch() : 0.0;
-    if (ThreadPitch.getValue() != pitch) {
-        ThreadPitch.setValue(pitch);
-    }
-#endif
     if (auto opt = determineDiameter()) {
         Diameter.setValue(opt.value());
     }
@@ -1660,7 +1654,12 @@ void Hole::onChanged(const App::Property* prop)
 
 #ifdef FREECAD_PERSONAL_CAD
     if (prop == &ThreadType || prop == &ThreadSize || prop == &ThreadClass || prop == &Threaded) {
-        const auto* limits = Threaded.getValue() && ThreadType.isValid() && ThreadSize.isValid()
+        const bool hasProfile = ThreadType.isValid() && ThreadType.getValue() > 0 && ThreadSize.isValid();
+        const double pitch = hasProfile ? getThreadPitch() : 0.0;
+        if (ThreadPitch.getValue() != pitch) {
+            ThreadPitch.setValue(pitch);
+        }
+        const auto* limits = hasProfile && Threaded.getValue()
             && ThreadClass.isValid() && std::string_view(ThreadType.getValueAsString()) == "ISOMetricProfile"
             && std::string_view(ThreadClass.getValueAsString()) == "6H"
             ? MetricCoarseThreadLimits::find(ThreadSize.getValueAsString()) : nullptr;

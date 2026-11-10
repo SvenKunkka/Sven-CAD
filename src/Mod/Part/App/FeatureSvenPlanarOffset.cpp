@@ -7,7 +7,7 @@
 #include <numbers>
 #include <sstream>
 
-#include <QCryptographicHash>
+#include <QUuid>
 
 #include <BRepAdaptor_Curve.hxx>
 #include <BRepAdaptor_Surface.hxx>
@@ -31,6 +31,8 @@
 #include <App/ElementMap.h>
 #include <App/Part.h>
 #include <Base/Exception.h>
+
+#include "FCBRepAlgoAPI_Common.h"
 
 using namespace Part;
 
@@ -138,21 +140,52 @@ TopoShape copySolidAndFace(const Feature& source, const char* name, TopoShape& f
     return copy;
 }
 
-std::string fingerprint(const Feature& source, TopoShape face)
+TopoShape localSource(const Feature& source)
 {
-    if (face.isNull() || face.getShape().ShapeType() != TopAbs_FACE) {
-        return {};
+    auto shape = source.Shape.getShape();
+    shape.locate(TopLoc_Location());
+    return shape;
+}
+
+bool sameBoundedFace(const TopoShape& candidate, const TopoShape& recorded)
+{
+    if (candidate.isNull() || recorded.isNull()
+        || candidate.getShape().ShapeType() != TopAbs_FACE
+        || recorded.getShape().ShapeType() != TopAbs_FACE
+        || candidate.getShape().Orientation() != recorded.getShape().Orientation()) {
+        return false;
     }
-    // Strip only the object's placement. Preserve the face's location within the solid.
-    auto location = source.Shape.getShape().getShape().Location().Inverted();
-    face.locate(location * face.getShape().Location());
-    std::ostringstream stream;
-    stream.imbue(std::locale::classic());
-    face.exportBrep(stream);
-    QCryptographicHash hash(QCryptographicHash::Sha256);
-    hash.addData(source.getNameInDocument());
-    hash.addData(QByteArray::fromStdString(stream.str()));
-    return hash.result().toHex().toStdString();
+    const auto a = TopoDS::Face(candidate.getShape());
+    const auto b = TopoDS::Face(recorded.getShape());
+    const BRepAdaptor_Surface surfaceA(a), surfaceB(b);
+    if (surfaceA.GetType() != surfaceB.GetType()) {
+        return false;
+    }
+    GProp_GProps propsA, propsB;
+    BRepGProp::SurfaceProperties(a, propsA);
+    BRepGProp::SurfaceProperties(b, propsB);
+    const double area = propsB.Mass();
+    const double areaTolerance = holeTolerance * std::sqrt(area);
+    if (area <= holeTolerance * holeTolerance
+        || std::abs(propsA.Mass() - area) > areaTolerance
+        || propsA.CentreOfMass().Distance(propsB.CentreOfMass()) > holeTolerance) {
+        return false;
+    }
+    std::ostringstream first, second;
+    candidate.exportBrep(first);
+    recorded.exportBrep(second);
+    if (first.str() == second.str()) {
+        return true;
+    }
+    // Save/restore can normalize B-Rep storage. Require equal bounded surface area,
+    // rather than inferring a match from centroid, area or a face index alone.
+    FCBRepAlgoAPI_Common overlap(a, b);
+    if (!overlap.IsDone() || overlap.Shape().IsNull()) {
+        return false;
+    }
+    GProp_GProps shared;
+    BRepGProp::SurfaceProperties(overlap.Shape(), shared);
+    return std::abs(shared.Mass() - area) <= areaTolerance;
 }
 
 void nameEditedFace(TopoShape& shape, int index, const std::string& identity)
@@ -316,8 +349,9 @@ SvenPlanarOffset::SvenPlanarOffset()
 {
     ADD_PROPERTY_TYPE(Support, (nullptr), "Offset", App::Prop_None, "Source solid and selected face");
     ADD_PROPERTY_TYPE(Offset, (1.0), "Offset", App::Prop_None, "Signed distance from the source face");
-    ADD_PROPERTY_TYPE(SupportFingerprint, (""), "Offset", App::Prop_Hidden,
-                      "Identity of the selected source face");
+    ADD_PROPERTY_TYPE(SupportIdentity, (""), "Offset", App::Prop_Hidden, "Stable face identity");
+    ADD_PROPERTY_TYPE(SupportGeometry, (TopoShape()), "Offset", App::Prop_Hidden,
+                      "Reference geometry of the selected source face");
     Placement.setStatus(App::Property::ReadOnly, true);
 }
 
@@ -392,18 +426,22 @@ TopoShape SvenPlanarOffset::calculate(const Feature& source, const char* faceNam
 
 short SvenPlanarOffset::mustExecute() const
 {
-    return Support.isTouched() || Offset.isTouched() || SupportFingerprint.isTouched()
+    return Support.isTouched() || Offset.isTouched() || SupportIdentity.isTouched()
         || Feature::mustExecute();
 }
 
 void SvenPlanarOffset::setSupport(Feature& source, const std::string& faceName)
 {
-    const auto identity = fingerprint(source, source.Shape.getShape().getSubTopoShape(faceName.c_str(), true));
-    if (identity.empty()) {
+    const auto face = localSource(source).getSubTopoShape(faceName.c_str(), true);
+    if (face.isNull() || face.getShape().ShapeType() != TopAbs_FACE) {
         throw Base::ValueError("The source face could not be resolved.");
     }
+    if (Support.getValue() != &source || !*SupportIdentity.getValue()
+        || !sameBoundedFace(face, SupportGeometry.getShape())) {
+        SupportIdentity.setValue(QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString());
+        SupportGeometry.setValue(face.makeElementCopy(nullptr, true, false, ElementMapPolicy::Drop));
+    }
     Support.setValue(&source, std::vector<std::string>{faceName});
-    SupportFingerprint.setValue(identity);
 }
 
 App::DocumentObjectExecReturn* SvenPlanarOffset::execute()
@@ -417,15 +455,15 @@ App::DocumentObjectExecReturn* SvenPlanarOffset::execute()
     }
     try {
         auto* feature = static_cast<Feature*>(source);
-        const auto& shape = feature->Shape.getShape();
+        const auto shape = localSource(*feature);
         auto faceName = faces.front();
-        auto identity = fingerprint(*feature, shape.getSubTopoShape(faceName.c_str(), true));
-        const std::string recorded = SupportFingerprint.getValue();
-        if (!recorded.empty() && identity != recorded) {
+        const std::string recorded = SupportIdentity.getValue();
+        const auto& geometry = SupportGeometry.getShape();
+        if (!recorded.empty() && !sameBoundedFace(shape.getSubTopoShape(faceName.c_str(), true), geometry)) {
             int match = 0;
             const int count = shape.countSubShapes(TopAbs_FACE);
             for (int index = 1; index <= count; ++index) {
-                if (fingerprint(*feature, shape.getSubTopoShape(TopAbs_FACE, index)) != recorded) {
+                if (!sameBoundedFace(shape.getSubTopoShape(TopAbs_FACE, index), geometry)) {
                     continue;
                 }
                 if (match) {
@@ -441,14 +479,13 @@ App::DocumentObjectExecReturn* SvenPlanarOffset::execute()
                 );
             }
             faceName = "Face" + std::to_string(match);
-            identity = recorded;
         }
         int editedFace = 0;
         auto result = buildResult(*feature, faceName.c_str(), editedFace);
-        nameEditedFace(result, editedFace, identity);
         if (recorded.empty()) {
-            SupportFingerprint.setValue(identity);
+            setSupport(*feature, faceName);
         }
+        nameEditedFace(result, editedFace, SupportIdentity.getValue());
         if (faceName != faces.front()) {
             Support.setValue(feature, std::vector<std::string>{faceName});
         }

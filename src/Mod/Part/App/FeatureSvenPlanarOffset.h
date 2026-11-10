@@ -19,7 +19,8 @@ public:
 
     App::PropertyLinkSub Support;
     App::PropertyDistance Offset;
-    App::PropertyString SupportFingerprint;
+    App::PropertyString SupportIdentity;
+    PropertyPartShape SupportGeometry;
 
     static bool supports(const App::DocumentObject* source);
     static TopoShape calculate(const Feature& source, const char* faceName, double offset,

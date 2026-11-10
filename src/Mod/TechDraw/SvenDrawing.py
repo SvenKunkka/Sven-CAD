@@ -344,6 +344,54 @@ def is_callout(obj):
     return obj is not None and obj.TypeId == "TechDraw::DrawViewAnnotationPython" and hasattr(obj, "ThreadFeature")
 
 
+def text_box(center, lines, size=TEXT_SIZE, line_space=160):
+    """Approximate page box (x0, y0, x1, y1) of annotation text centred on a point."""
+    lines = [l for l in lines] or [""]
+    width = 0.62 * size * max(len(l) for l in lines)
+    height = size * (1.4 + (len(lines) - 1) * line_space / 100.0)
+    return (center.x - width / 2, center.y - height / 2, center.x + width / 2, center.y + height / 2)
+
+
+def _overlap(a, b, gap=1.0):
+    return a[0] < b[2] + gap and b[0] < a[2] + gap and a[1] < b[3] + gap and b[1] < a[3] + gap
+
+
+def _page_size(page):
+    template = page.Template
+    width = float(template.Width) if template is not None and hasattr(template, "Width") else 420.0
+    height = float(template.Height) if template is not None and hasattr(template, "Height") else 297.0
+    return width, height
+
+
+def page_text_boxes(page, exclude=()):
+    """Boxes of the callouts and BOM columns already printed on a page."""
+    boxes = []
+    for v in page.Views:
+        if v in exclude or not (is_callout(v) or is_bom_cell(v)) or not any(list(v.Text)):
+            continue
+        boxes.append(text_box(App.Vector(v.X.Value, v.Y.Value, 0), list(v.Text), v.TextSize.Value))
+    return boxes
+
+
+def free_offset(page, anchor, text, taken):
+    """First text offset from a thread whose callout does not cover other text or leave the frame."""
+    width, height = _page_size(page)
+    frame = (10.0, 10.0, width - 10.0, height - 10.0)
+    step = TEXT_SIZE * 1.8
+    candidates = []
+    for k in range(12):
+        for sx in (1, -1):
+            for sy in (1, -1):
+                candidates.append(App.Vector(12 * sx, sy * (10 + k * step), 0))
+    for offset in candidates:
+        box = text_box(anchor + offset, [text])
+        inside = box[0] >= frame[0] and box[1] >= frame[1] and box[2] <= frame[2] and box[3] <= frame[3]
+        if inside and not any(_overlap(box, other) for other in taken):
+            return offset, box
+    offset = candidates[0]
+    return offset, text_box(anchor + offset, [text])
+
+
 def add_callouts(view):
     """Annotate every thread of a view that has no callout yet. Returns the new callouts."""
     page = view.findParentPage()
@@ -352,6 +400,8 @@ def add_callouts(view):
     if not view.getVisibleEdges():
         raise DrawingError("The view has no geometry yet. Recompute it and try again.")
     existing = {(c.ThreadFeature, c.HoleIndex) for c in callouts(view)}
+    taken = page_text_boxes(page)
+    center = view_center(view)
     created = []
     for spec in view_threads(view):
         if (spec["feature"], spec["index"]) in existing:
@@ -359,6 +409,8 @@ def add_callouts(view):
         obj = view.Document.addObject("TechDraw::DrawViewAnnotationPython", "ThreadCallout")
         ThreadCallout(obj, view, spec)
         obj.Label = spec["text"]
+        obj.TextOffset, box = free_offset(page, _to_page(view, spec["start"], center), spec["text"], taken)
+        taken.append(box)
         page.addView(obj)
         created.append(obj)
     for obj in created:
@@ -412,19 +464,30 @@ def make_bom(assembly):
     return bom
 
 
-class BomColumn:
-    """One BOM column printed on a drawing page."""
+BOM_ROW_PITCH = 2.0 * TEXT_SIZE
 
-    def __init__(self, obj, bom, column):
+
+class BomCell:
+    """One cell of a BOM table printed on a drawing page.
+
+    Each cell is a single line of text so that the page, the PDF and the DXF put it at the
+    same place; TechDraw spaces the lines of a multi-line annotation by font metrics."""
+
+    def __init__(self, obj, bom, column, row):
         obj.Proxy = self
         obj.addProperty("App::PropertyLinkGlobal", "Bom", TABLE_GROUP, "Bill of materials shown in the table")
         obj.addProperty("App::PropertyString", "Column", TABLE_GROUP, "BOM column shown")
-        obj.addProperty("App::PropertyString", "Heading", TABLE_GROUP, "Printed heading")
+        obj.addProperty("App::PropertyInteger", "Row", TABLE_GROUP, "Table row, 0 is the heading")
+        obj.addProperty("App::PropertyString", "Heading", TABLE_GROUP, "Printed heading of the column")
+        obj.addProperty("App::PropertyFloat", "TableRight", TABLE_GROUP, "Right edge of the table, page mm")
+        obj.addProperty("App::PropertyFloat", "TableTop", TABLE_GROUP, "Top edge of the table, page mm")
         obj.Bom = bom
         obj.Column = column
+        obj.Row = row
         obj.Heading = dict(BOM_COLUMNS).get(column, column.lstrip("."))
         obj.TextSize = TEXT_SIZE
-        obj.LineSpace = 160
+        if row == 0:
+            obj.TextStyle = "Bold"
 
     def dumps(self):
         return None
@@ -439,21 +502,43 @@ class BomColumn:
         columns = list(bom.columnsNames)
         if obj.Column not in columns:
             raise DrawingError(f"The BOM has no column {obj.Column}.")
-        index = columns.index(obj.Column)
-        text = [obj.Heading] + [row[index] for row in bom_rows(bom)]
-        if list(obj.Text) != text:
-            obj.Text = text
+        rows = bom_rows(bom)
+        if obj.Row == 0:
+            text = obj.Heading
+        elif obj.Row <= len(rows):
+            text = rows[obj.Row - 1][columns.index(obj.Column)]
+        else:
+            # The table shrank; the next table refresh removes this cell.
+            text = ""
+        if list(obj.Text) != [text]:
+            obj.Text = [text]
+        x, y = bom_layout(bom, obj.TableRight, obj.TableTop)[obj.Column]
+        y -= obj.Row * BOM_ROW_PITCH
+        if abs(obj.X.Value - x) > 1e-9 or abs(obj.Y.Value - y) > 1e-9:
+            obj.X = x
+            obj.Y = y
 
     def onDocumentRestored(self, obj):
         obj.Proxy = self
 
 
-def is_bom_column(obj):
-    return obj is not None and obj.TypeId == "TechDraw::DrawViewAnnotationPython" and hasattr(obj, "Bom")
+def is_bom_cell(obj):
+    return (obj is not None and obj.TypeId == "TechDraw::DrawViewAnnotationPython"
+            and hasattr(obj, "Bom") and hasattr(obj, "Row"))
 
 
-def bom_columns(page):
-    return sorted((v for v in page.Views if is_bom_column(v)), key=lambda c: c.X.Value)
+def bom_cells(page):
+    return sorted((v for v in page.Views if is_bom_cell(v)),
+                  key=lambda c: (c.Row, list(c.Bom.columnsNames).index(c.Column)
+                                 if c.Bom is not None and c.Column in c.Bom.columnsNames else 99))
+
+
+def bom_grid(page):
+    """Printed BOM text as rows of cells, heading first."""
+    grid = {}
+    for cell in bom_cells(page):
+        grid.setdefault(cell.Row, []).append(cell.Text[0] if list(cell.Text) else "")
+    return [grid[r] for r in sorted(grid)]
 
 
 def _column_widths(headings, rows):
@@ -464,35 +549,57 @@ def _column_widths(headings, rows):
     return widths
 
 
+def bom_layout(bom, right, top):
+    """Centre of the heading cell of every BOM column for a table with a fixed top right corner."""
+    headings, rows = bom_table(bom)
+    widths = _column_widths(headings, rows)
+    x = right - sum(widths)
+    y = top - BOM_ROW_PITCH / 2
+    layout = {}
+    for column, w in zip(bom.columnsNames, widths):
+        layout[column] = (x + w / 2, y)
+        x += w
+    return layout
+
+
+def bom_needs_layout(page):
+    """True when the printed cells no longer match the rows and columns of the BOM."""
+    bom = page_bom(page)
+    if bom is None:
+        return False
+    have = {(c.Column, c.Row) for c in bom_cells(page) if c.Bom == bom}
+    want = {(c, r) for c in bom.columnsNames for r in range(len(bom_rows(bom)) + 1)}
+    return have != want
+
+
 def place_bom(page, bom, right=None, top=None):
-    """Print the BOM on a page as aligned annotation columns, reusing an existing table."""
-    template = page.Template
-    width = float(template.Width) if template is not None and hasattr(template, "Width") else 420.0
-    height = float(template.Height) if template is not None and hasattr(template, "Height") else 297.0
+    """Print the BOM on a page as one annotation per cell, reusing the cells already there."""
+    width, height = _page_size(page)
+    old = [c for c in bom_cells(page) if c.Bom == bom]
+    if old and right is None and top is None:
+        right, top = old[0].TableRight, old[0].TableTop
     right = width - 15.0 if right is None else right
     top = height - 15.0 if top is None else top
     bom.recompute()
-    headings, rows = bom_table(bom)
-    columns = {c.Column: c for c in bom_columns(page) if c.Bom == bom}
-    widths = _column_widths(headings, rows)
-    x = right - sum(widths)
-    lines = len(rows) + 1
-    y = top - TEXT_SIZE * 1.6 * lines / 2
+    cells = {(c.Column, c.Row): c for c in old}
     placed = []
-    for column, w in zip(bom.columnsNames, widths):
-        obj = columns.pop(column, None)
-        if obj is None:
-            obj = page.Document.addObject("TechDraw::DrawViewAnnotationPython", "BomColumn")
-            BomColumn(obj, bom, column)
-            obj.Label = "BOM " + obj.Heading
-            page.addView(obj)
-        obj.X = x + w / 2
-        obj.Y = y
-        x += w
-        obj.recompute()
-        placed.append(obj)
-    for stale in columns.values():
+    for row in range(len(bom_rows(bom)) + 1):
+        for column in bom.columnsNames:
+            obj = cells.pop((column, row), None)
+            if obj is None:
+                obj = page.Document.addObject("TechDraw::DrawViewAnnotationPython", "BomCell")
+                BomCell(obj, bom, column, row)
+                obj.Label = f"BOM {obj.Heading} {row}" if row else f"BOM {obj.Heading}"
+                page.addView(obj)
+            obj.TableRight = right
+            obj.TableTop = top
+            obj.recompute()
+            placed.append(obj)
+    for stale in cells.values():
         page.Document.removeObject(stale.Name)
+    for cell in bom_cells(page):
+        if cell.Bom != bom:
+            page.Document.removeObject(cell.Name)
     return placed
 
 
@@ -508,5 +615,5 @@ def write_csv(path, bom):
 
 
 def page_bom(page):
-    boms = {c.Bom for c in bom_columns(page) if c.Bom is not None}
+    boms = {c.Bom for c in bom_cells(page) if c.Bom is not None}
     return boms.pop() if len(boms) == 1 else None

@@ -735,7 +735,9 @@ private:
                         int just = 1;                              //centered
                         auto lines = dva->Text.getValues();
 #ifdef FREECAD_PERSONAL_CAD
-                        // Write every line, centred on the annotation like the page does.
+                        // Write every line, LineSpace percent of the text height apart and centred on
+                        // the annotation. The page spaces lines by font metrics, so text that must sit
+                        // at the same place in both is kept to one line per annotation.
                         const double pitch = height * dva->LineSpace.getValue() / 100.0;
                         const double top = dva->Y.getValue() + pitch * (static_cast<double>(lines.size()) - 1.0) / 2.0;
                         for (size_t i = 0; i < lines.size(); ++i) {

@@ -104,6 +104,7 @@ def export_drawing(page, pdf_path):
 
     base = os.path.splitext(pdf_path)[0]
     page.Document.recompute()
+    refresh_bom_tables(page.Document)
     if not wait_for_views(page):
         raise SvenDrawing.DrawingError(tr("The views are still being computed. Try again in a moment."))
     page.Document.recompute()
@@ -224,7 +225,62 @@ class ExportDrawingCommand:
         _message(tr("Drawing exported"), "\n".join(written), warning=False, name="SvenDrawingExportResult")
 
 
+def refresh_bom_tables(doc):
+    """Add or remove BOM cells after the BOM gained or lost rows. Returns the refreshed pages."""
+    import SvenDrawing
+    pages = [p for p in doc.Objects if p.isDerivedFrom("TechDraw::DrawPage") and SvenDrawing.bom_needs_layout(p)]
+    if not pages:
+        return []
+    own = not doc.HasPendingTransaction
+    if own:
+        doc.openTransaction(tr("BOM Table"))
+    try:
+        for page in pages:
+            SvenDrawing.place_bom(page, SvenDrawing.page_bom(page))
+        doc.recompute()
+    except Exception as error:
+        if own:
+            doc.abortTransaction()
+        App.Console.PrintWarning(f"BOM table refresh failed: {error}\n")
+        return []
+    if own:
+        doc.commitTransaction()
+    return pages
+
+
+class BomTableObserver:
+    """Keeps printed BOM tables in step with the BOM when a recompute adds or removes rows.
+
+    New cells cannot be created during a recompute, so the refresh runs right after it."""
+
+    def __init__(self):
+        self.pending = set()
+
+    def slotRecomputedDocument(self, doc):
+        import SvenDrawing
+        if doc.Name in self.pending or doc.Restoring or doc.Transacting:
+            return
+        if not any(p.isDerivedFrom("TechDraw::DrawPage") and SvenDrawing.bom_needs_layout(p) for p in doc.Objects):
+            return
+        from PySide import QtCore
+        self.pending.add(doc.Name)
+        QtCore.QTimer.singleShot(0, lambda name=doc.Name: self.refresh(name))
+
+    def refresh(self, name):
+        self.pending.discard(name)
+        doc = App.listDocuments().get(name)
+        if doc is not None and not doc.Transacting:
+            refresh_bom_tables(doc)
+
+
+_observer = None
+
+
 def register():
+    global _observer
+    if _observer is None:
+        _observer = BomTableObserver()
+        App.addDocumentObserver(_observer)
     Gui.addCommand("PersonalCAD_ThreadCallouts", ThreadCalloutsCommand())
     Gui.addCommand("PersonalCAD_DrawingBom", DrawingBomCommand())
     Gui.addCommand("PersonalCAD_ExportDrawing", ExportDrawingCommand())

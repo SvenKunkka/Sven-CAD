@@ -23,7 +23,7 @@ PREFIX = Path(os.environ.get("PERSONAL_CAD_PREFIX", CANDIDATE / ".pixi/envs/defa
 REFERENCE = Path(os.environ.get(
     "PERSONAL_CAD_REFERENCE_APP", WORK / "reference/FreeCAD.app"
 )).expanduser().resolve() / "Contents"
-QT_REFERENCE = WORK / "qt"
+QT_REFERENCE = (WORK / "qt").resolve()
 PLUGIN_PATH = Path("lib/qt6/plugins/platforms/libqcocoa.dylib")
 WIDGETS_PATH = Path("lib/libQt6Widgets.6.11.2.dylib")
 CORE_LIBRARIES = tuple(Path(f"lib/libFreeCAD{name}.dylib") for name in ("App", "Base", "Gui"))

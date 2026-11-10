@@ -515,7 +515,11 @@ void StartView::retranslateUi()
 
     _newFileLabel->setText(h1Start + tr("New File") + h1End);
     _newEmptyFileButton->setHeadingText(tr("Empty File"));
-    _newEmptyFileButton->setDescriptionText(tr("Creates a new empty FreeCAD file"));
+    auto emptyFileDescription = tr("Creates a new empty FreeCAD file");
+#ifdef FREECAD_PERSONAL_CAD
+    emptyFileDescription.replace(QStringLiteral("FreeCAD"), QApplication::applicationName());
+#endif
+    _newEmptyFileButton->setDescriptionText(emptyFileDescription);
     _openFileButton->setHeadingText(tr("Open File"));
     _openFileButton->setDescriptionText(tr("Opens an existing CAD file or 3D model"));
     _partDesignButton->setHeadingText(tr("Parametric Body"));

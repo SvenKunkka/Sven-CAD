@@ -44,6 +44,13 @@
 
 using namespace StartGui;
 
+static QString displayThemeName(QString label)
+{
+#ifdef FREECAD_PERSONAL_CAD
+    label.replace(QStringLiteral("FreeCAD"), QGuiApplication::applicationName());
+#endif
+    return label;
+}
 
 static bool isSystemInDarkMode()
 {
@@ -135,7 +142,7 @@ void ThemeSelectorWidget::setupButtons(QBoxLayout* layout)
         button->setCheckable(true);
         button->setAutoExclusive(true);
         button->setToolButtonStyle(Qt::ToolButtonStyle::ToolButtonTextUnderIcon);
-        button->setText(theme.second);
+        button->setText(displayThemeName(theme.second));
         button->setIcon(iconMap[theme.first]);
         button->setIconSize(iconMap[theme.first].actualSize(QSize(256, 256)));
         if (theme.first == Theme::Classic && styleSheetName.isEmpty()) {
@@ -258,7 +265,13 @@ void ThemeSelectorWidget::retranslateUi()
     else {
         _descriptionLabel->hide();
     }
-    _buttons[static_cast<int>(Theme::Dark)]->setText(tr("FreeCAD Dark", "Visual theme name"));
-    _buttons[static_cast<int>(Theme::Light)]->setText(tr("FreeCAD Light", "Visual theme name"));
-    _buttons[static_cast<int>(Theme::Classic)]->setText(tr("FreeCAD Classic", "Visual theme name"));
+    _buttons[static_cast<int>(Theme::Dark)]->setText(
+        displayThemeName(tr("FreeCAD Dark", "Visual theme name"))
+    );
+    _buttons[static_cast<int>(Theme::Light)]->setText(
+        displayThemeName(tr("FreeCAD Light", "Visual theme name"))
+    );
+    _buttons[static_cast<int>(Theme::Classic)]->setText(
+        displayThemeName(tr("FreeCAD Classic", "Visual theme name"))
+    );
 }

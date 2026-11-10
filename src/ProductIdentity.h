@@ -10,6 +10,7 @@ inline constexpr char displayName[] = "Sven CAD";
 inline constexpr char desktopId[] = "local.personalcad.PersonalCAD";
 #else
 inline constexpr char executableName[] = "FreeCAD";
+inline constexpr char displayName[] = "FreeCAD";
 inline constexpr char desktopId[] = "org.freecad.FreeCAD";
 #endif
 }  // namespace ProductIdentity

@@ -163,6 +163,8 @@ ExternalThread::ExternalThread()
     ADD_PROPERTY_TYPE(Pitch, (0.5), "Thread", App::Prop_ReadOnly, "Nominal thread pitch");
     ADD_PROPERTY_TYPE(MajorDiameter, (3.0), "Thread", App::Prop_ReadOnly, "Nominal major diameter");
     ADD_PROPERTY_TYPE(MinorDiameter, (2.0 * rootRadius(1.5, 0.5)), "Thread", App::Prop_ReadOnly, "Nominal minor diameter");
+    ADD_PROPERTY_TYPE(ThreadFrame, (Base::Placement()), "Thread",
+                      static_cast<App::PropertyType>(App::Prop_ReadOnly | App::Prop_Output), "Thread start on the axis in the feature coordinates. Z points along the thread.");
 }
 
 const char* ExternalThread::ManufacturingClasses[] = {"Unspecified", "6g", nullptr};
@@ -328,6 +330,11 @@ App::DocumentObjectExecReturn* ExternalThread::execute()
         const auto size = static_cast<int>(ThreadSize.getValue());
         auto result = makeShape(shaft, size, ThreadLength.getValue(), LeftHanded.getValue(), Modeled.getValue());
         setThreadResult(*source, result);
+        const auto& origin = shaft.axes.Location();
+        const auto& axis = shaft.axes.Direction();
+        ThreadFrame.setValue(Base::Placement(Base::Vector3d(origin.X(), origin.Y(), origin.Z()),
+                                             Base::Rotation(Base::Vector3d(0, 0, 1),
+                                                            Base::Vector3d(axis.X(), axis.Y(), axis.Z()))));
         return Part::Feature::execute();
     }
     catch (const Base::Exception& error) {

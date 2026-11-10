@@ -60,6 +60,7 @@ public:
     App::PropertyEnumeration ThreadClass;
 #ifdef FREECAD_PERSONAL_CAD
     App::PropertyString ManufacturingLimits;
+    App::PropertyPlacementList ThreadFrames;
 #endif
     App::PropertyEnumeration ThreadFit;
     App::PropertyLength Diameter;

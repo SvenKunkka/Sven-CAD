@@ -571,6 +571,9 @@ Hole::Hole()
     ADD_PROPERTY_TYPE(ManufacturingLimits, (""), "Manufacturing",
                       static_cast<App::PropertyType>(App::Prop_ReadOnly | App::Prop_Output),
                       "Reference diameter limits and normal engagement length");
+    ADD_PROPERTY_TYPE(ThreadFrames, (), "Manufacturing",
+                      static_cast<App::PropertyType>(App::Prop_ReadOnly | App::Prop_Output),
+                      "Start of each hole on its axis in the feature coordinates. Z points into the material.");
 #endif
 
     ADD_PROPERTY_TYPE(ThreadType, (0L), "Hole", App::Prop_None, "Thread type");
@@ -2090,6 +2093,17 @@ App::DocumentObjectExecReturn* Hole::execute()
         }
         std::vector<TopoShape> holes;
         auto compound = findHoles(holes, profileshape, protoHole);
+#ifdef FREECAD_PERSONAL_CAD
+        {
+            std::vector<Base::Placement> frames;
+            const Base::Rotation along(Base::Vector3d(0, 0, 1),
+                                       Base::Vector3d(holeDirection.X(), holeDirection.Y(), holeDirection.Z()));
+            for (const auto& location : _holeLocations) {
+                frames.emplace_back(Base::Vector3d(location.X(), location.Y(), location.Z()), along);
+            }
+            ThreadFrames.setValues(frames);
+        }
+#endif
         if (holes.empty()) {
             return new App::DocumentObjectExecReturn(
                 QT_TRANSLATE_NOOP("Exception", "Hole error: Finding axis failed")

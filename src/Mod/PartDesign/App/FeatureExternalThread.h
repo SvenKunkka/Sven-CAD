@@ -29,6 +29,7 @@ public:
     App::PropertyLength Pitch;
     App::PropertyLength MajorDiameter;
     App::PropertyLength MinorDiameter;
+    App::PropertyPlacement ThreadFrame;
 
     struct Shaft
     {

@@ -26,6 +26,7 @@ public:
     App::PropertyLength BoreDiameter;
     App::PropertyString ManufacturingClass;
     App::PropertyString ManufacturingLimits;
+    App::PropertyPlacement ThreadFrame;
 
     struct HoleWall : Part::SvenHoleResize::Bore
     {

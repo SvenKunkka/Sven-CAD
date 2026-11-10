@@ -86,6 +86,8 @@ InternalThread::InternalThread()
     ADD_PROPERTY_TYPE(ManufacturingClass, ("6H"), "Manufacturing", App::Prop_ReadOnly, "Drawing tolerance class");
     ADD_PROPERTY_TYPE(ManufacturingLimits, (""), "Manufacturing", App::Prop_ReadOnly,
                       "Reference diameter limits and normal engagement length");
+    ADD_PROPERTY_TYPE(ThreadFrame, (Base::Placement()), "Thread",
+                      static_cast<App::PropertyType>(App::Prop_ReadOnly | App::Prop_Output), "Thread start on the axis in the feature coordinates. Z points along the thread.");
 }
 
 InternalThread::HoleWall InternalThread::describe(const Part::Feature& source, const char* faceName)
@@ -159,6 +161,16 @@ void InternalThread::setThreadResult(Part::Feature& source, const HoleWall& bore
     MajorDiameter.setValue(ExternalThread::majorDiameterForSize(bore.size));
     BoreDiameter.setValue(2 * bore.radius);
     ManufacturingLimits.setValue(MetricCoarseThreadLimits::find(ExternalThread::Sizes[bore.size])->internalReference());
+    // Same start and direction as the groove placement in makeShape, for drawings and callouts.
+    auto start = bore.start.Location();
+    auto direction = bore.start.Direction();
+    if (!bore.startOpen || ReverseStart.getValue()) {
+        start.Translate(gp_Vec(direction) * bore.depth);
+        direction.Reverse();
+    }
+    ThreadFrame.setValue(Base::Placement(Base::Vector3d(start.X(), start.Y(), start.Z()),
+                                         Base::Rotation(Base::Vector3d(0, 0, 1),
+                                                        Base::Vector3d(direction.X(), direction.Y(), direction.Z()))));
     Placement.setValue(source.Placement.getValue());
     auto placed = shape;
     placed.setTransform(Placement.getValue().toMatrix());

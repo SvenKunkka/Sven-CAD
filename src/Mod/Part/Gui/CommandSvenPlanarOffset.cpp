@@ -47,6 +47,7 @@ namespace
 {
 
 using Part::SvenPlanarOffset;
+using Part::SvenHoleResize;
 
 Part::Feature* selectedSource(const App::SubObjectT& selection)
 {
@@ -88,6 +89,12 @@ gp_Dir orientedPlaneNormal(const TopoDS_Face& face, const gp_Pln& plane)
     return normal;
 }
 
+bool coaxial(const gp_Cylinder& cylinder, const gp_Cylinder& other)
+{
+    return cylinder.Axis().Direction().IsParallel(other.Axis().Direction(), 1e-6)
+        && gp_Lin(cylinder.Axis()).Distance(other.Location()) <= 10 * Precision::Confusion();
+}
+
 bool sameSurface(const BRepAdaptor_Surface& first, const BRepAdaptor_Surface& second)
 {
     const double tolerance = 10 * Precision::Confusion();
@@ -104,8 +111,7 @@ bool sameSurface(const BRepAdaptor_Surface& first, const BRepAdaptor_Surface& se
     if (first.GetType() == GeomAbs_Cylinder) {
         const auto cylinder = first.Cylinder();
         const auto other = second.Cylinder();
-        return cylinder.Axis().Direction().IsParallel(other.Axis().Direction(), angle)
-            && gp_Lin(cylinder.Axis()).Distance(other.Location()) <= tolerance
+        return coaxial(cylinder, other)
             && std::abs(cylinder.Radius() - other.Radius()) <= tolerance;
     }
     return false;
@@ -140,8 +146,7 @@ void copyAppearance(
     const auto& support = TopoDS::Face(supportShape.getShape());
     const int selectedIndex = originalShape.findShape(support);
     const BRepAdaptor_Surface supportSurface(support);
-    if (selectedIndex <= 0 || static_cast<size_t>(selectedIndex) > coloredFaces
-        || supportSurface.GetType() != GeomAbs_Plane) {
+    if (selectedIndex <= 0 || static_cast<size_t>(selectedIndex) > coloredFaces) {
         return;
     }
     std::vector<int> mapped(resultFaces, -1);
@@ -161,7 +166,8 @@ void copyAppearance(
         }
     }
 
-    const auto normal = orientedPlaneNormal(support, supportSurface.Plane());
+    const auto* resize = freecad_cast<SvenHoleResize*>(&result);
+    const auto normal = resize ? gp_Dir() : orientedPlaneNormal(support, supportSurface.Plane());
     const auto cap = faceProperties(support);
     const auto expectedCap = cap.CentreOfMass().Translated(gp_Vec(normal) * result.Offset.getValue());
     const double tolerance = 10 * Precision::Confusion();
@@ -170,10 +176,14 @@ void copyAppearance(
         const auto face = TopoDS::Face(resultShape.getSubShape(TopAbs_FACE, static_cast<int>(i + 1)));
         const BRepAdaptor_Surface surface(face);
         const auto props = faceProperties(face);
-        if (surface.GetType() == GeomAbs_Plane
+        const bool resizedWall = resize && surface.GetType() == GeomAbs_Cylinder
+            && coaxial(supportSurface.Cylinder(), surface.Cylinder())
+            && std::abs(surface.Cylinder().Radius() - resize->Diameter.getValue() / 2) <= tolerance
+            && props.CentreOfMass().Distance(cap.CentreOfMass()) <= tolerance;
+        if (resizedWall || (!resize && surface.GetType() == GeomAbs_Plane
             && orientedPlaneNormal(face, surface.Plane()).IsEqual(normal, 1e-6)
             && props.CentreOfMass().Distance(expectedCap) <= tolerance
-            && std::abs(props.Mass() - cap.Mass()) <= tolerance * std::sqrt(cap.Mass())) {
+            && std::abs(props.Mass() - cap.Mass()) <= tolerance * std::sqrt(cap.Mass()))) {
             appearance[i] = materials[selectedIndex - 1];
         }
         else if (mapped[i] >= 0) {
@@ -215,7 +225,7 @@ public:
         sAppModule = "Part";
         sGroup = QT_TR_NOOP("Part");
         sMenuText = QT_TR_NOOP("Offset Planar Face");
-        sToolTipText = QT_TR_NOOP("Offsets a planar face of one STEP solid");
+        sToolTipText = QT_TR_NOOP("Offsets a plane or resizes a cylindrical hole on a STEP solid");
         sStatusTip = sToolTipText;
         sPixmap = "Part_Offset";
         eType = ForEdit;
@@ -237,14 +247,14 @@ protected:
         auto selection = Gui::Selection().getSelectionT(nullptr, Gui::ResolveMode::NoResolve, true);
         auto* source = selection.size() == 1 ? selectedSource(selection.front()) : nullptr;
         if (!source) {
-            Gui::getMainWindow()->showMessage(tr("Select one planar face on a STEP solid."), 5000);
+            Gui::getMainWindow()->showMessage(tr("Select a planar face or cylindrical hole wall on a STEP solid."), 5000);
             return;
         }
         auto* view = freecad_cast<PartGui::ViewProviderPartExt*>(
             getActiveGuiDocument()->getViewProvider(source)
         );
         if (!view || !view->isShow()) {
-            Gui::getMainWindow()->showMessage(tr("Show the source solid before offsetting its face."), 5000);
+            Gui::getMainWindow()->showMessage(tr("Show the source solid before editing its face."), 5000);
             return;
         }
         const auto& reference = selection.front();
@@ -253,18 +263,32 @@ protected:
             face = reference.getElementName();
         }
 
+        double currentDiameter = 0;
+        const auto selected = source->Shape.getShape().getSubTopoShape(face.c_str(), true);
+        if (!selected.isNull() && selected.getShape().ShapeType() == TopAbs_FACE) {
+            const BRepAdaptor_Surface surface(TopoDS::Face(selected.getShape()));
+            if (surface.GetType() == GeomAbs_Cylinder) {
+                currentDiameter = 2 * surface.Cylinder().Radius();
+            }
+        }
+        const bool resize = currentDiameter > 0;
+        const auto title = resize ? tr("Resize Cylindrical Hole") : tr("Offset Planar Face");
         QDialog dialog(Gui::getMainWindow());
         dialog.setObjectName(QStringLiteral("SvenPlanarOffsetDialog"));
-        dialog.setWindowTitle(tr("Offset Planar Face"));
+        dialog.setWindowTitle(title);
         auto* layout = new QFormLayout(&dialog);
         auto* distance = new QDoubleSpinBox(&dialog);
         distance->setObjectName(QStringLiteral("SvenPlanarOffsetDistance"));
         distance->setDecimals(4);
-        distance->setRange(-1000000.0, 1000000.0);
+        distance->setRange(resize ? 0.0001 : -1000000.0, 1000000.0);
         distance->setSingleStep(0.1);
         distance->setSuffix(QStringLiteral(" mm"));
-        distance->setValue(1);
-        layout->addRow(tr("Distance"), distance);
+        distance->setValue(resize ? currentDiameter : 1);
+        if (resize) {
+            auto* existing = new QLabel(distance->text(), &dialog);
+            layout->addRow(tr("Current diameter"), existing);
+        }
+        layout->addRow(resize ? tr("New diameter") : tr("Distance"), distance);
         auto* status = new QLabel(&dialog);
         status->setObjectName(QStringLiteral("SvenPlanarOffsetStatus"));
         status->setMinimumWidth(300);
@@ -298,7 +322,9 @@ protected:
                     status->setText(tr("The source face is no longer available."));
                     return;
                 }
-                auto result = SvenPlanarOffset::calculate(*support, face.c_str(), distance->value());
+                auto result = resize
+                    ? SvenHoleResize::calculate(*support, face.c_str(), distance->value())
+                    : SvenPlanarOffset::calculate(*support, face.c_str(), distance->value());
                 PartGui::ViewProviderPartExt::setupCoinGeometry(
                     result.getShape(),
                     preview,
@@ -316,17 +342,18 @@ protected:
                     preview->lineset->materialIndex.set1Value(i, 0);
                 }
                 annotation->addChild(preview);
-                status->setText(tr("Positive moves outward. Negative moves inward."));
+                status->setText(resize ? tr("The hole axis and depth are preserved.")
+                                       : tr("Positive moves outward. Negative moves inward."));
                 okay->setEnabled(true);
             }
             catch (const Base::Exception& error) {
                 status->setText(QCoreApplication::translate("SvenPlanarOffset", error.what()));
             }
             catch (const Standard_Failure&) {
-                status->setText(tr("The geometry engine could not preview this offset."));
+                status->setText(tr("The geometry engine could not preview this edit."));
             }
             catch (const std::exception&) {
-                status->setText(tr("The geometry engine could not preview this offset."));
+                status->setText(tr("The geometry engine could not preview this edit."));
             }
         };
         QTimer debounce(&dialog);
@@ -344,11 +371,12 @@ protected:
             return;
         }
         removePreview();
-        commit(reference, face, distance->value());
+        commit(reference, face, distance->value(), resize, title);
     }
 
 private:
-    void commit(const App::SubObjectT& reference, const std::string& face, double distance)
+    void commit(const App::SubObjectT& reference, const std::string& face, double distance,
+                bool resize, const QString& title)
     {
         auto* source = selectedSource(reference);
         auto* document = getActiveDocument();
@@ -358,23 +386,31 @@ private:
             Gui::getMainWindow()->showMessage(tr("The source or document changed before confirmation."), 5000);
             return;
         }
-        const int transactionId = document->openTransaction(tr("Offset Planar Face").toStdString());
+        const int transactionId = document->openTransaction(title.toStdString());
         if (transactionId == App::NullTransaction) {
-            Gui::getMainWindow()->showMessage(tr("The planar offset could not be applied."), 5000);
+            Gui::getMainWindow()->showMessage(tr("The face edit could not be applied."), 5000);
             return;
         }
         App::AutoTransaction transaction(transactionId);
         try {
-            auto* result = static_cast<SvenPlanarOffset*>(
-                document->addObject("Part::SvenPlanarOffset", "PlanarOffset")
-            );
+            auto* result = resize
+                ? static_cast<SvenPlanarOffset*>(document->addObject<SvenHoleResize>("HoleResize"))
+                : document->addObject<SvenPlanarOffset>("PlanarOffset");
+            if (!result) {
+                throw Base::ValueError("The face edit could not be created.");
+            }
             if (auto* parent = App::GeoFeatureGroupExtension::getGroupOfObject(source)) {
                 static_cast<App::Part*>(parent)->addObject(result);
             }
             result->Support.setValue(source, std::vector<std::string>{face});
-            result->Offset.setValue(distance);
+            if (resize) {
+                static_cast<SvenHoleResize*>(result)->Diameter.setValue(distance);
+            }
+            else {
+                result->Offset.setValue(distance);
+            }
             if (!result->recomputeFeature()) {
-                throw Base::ValueError("The planar offset could not be applied.");
+                throw Base::ValueError("The face edit could not be applied.");
             }
             auto* sourceView = freecad_cast<PartGui::ViewProviderPartExt*>(gui->getViewProvider(source));
             auto* resultView = freecad_cast<PartGui::ViewProviderPartExt*>(gui->getViewProvider(result));
@@ -387,7 +423,7 @@ private:
         }
         catch (...) {
             transaction.close(App::TransactionCloseMode::Abort);
-            Gui::getMainWindow()->showMessage(tr("The planar offset could not be applied."), 5000);
+            Gui::getMainWindow()->showMessage(tr("The face edit could not be applied."), 5000);
         }
     }
 };

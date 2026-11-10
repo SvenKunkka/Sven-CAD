@@ -4,11 +4,15 @@
 
 #include <algorithm>
 #include <cmath>
+#include <numbers>
 
+#include <BRepAdaptor_Curve.hxx>
 #include <BRepAdaptor_Surface.hxx>
 #include <BRepCheck_Analyzer.hxx>
 #include <BRepGProp.hxx>
+#include <BRepPrimAPI_MakeCylinder.hxx>
 #include <GProp_GProps.hxx>
+#include <gp_Lin.hxx>
 #include <gp_Cylinder.hxx>
 #include <gp_Pln.hxx>
 #include <Precision.hxx>
@@ -30,6 +34,7 @@ namespace
 {
 
 constexpr double angularTolerance = 1e-6;
+const double holeTolerance = 10 * Precision::Confusion();
 
 // STEP imports and Boolean results can wrap a solid in a compound.
 bool isSingleSolid(TopoDS_Shape shape)
@@ -111,6 +116,125 @@ double volume(const TopoDS_Shape& shape)
     return props.Mass();
 }
 
+TopoShape copySolidAndFace(const Feature& source, const char* name, TopoShape& face)
+{
+    const auto& shape = source.Shape.getShape();
+    const auto selected = shape.getSubTopoShape(name, true);
+    const int index = selected.isNull() ? 0 : shape.findShape(selected.getShape());
+    if (index <= 0 || selected.getShape().ShapeType() != TopAbs_FACE) {
+        throw Base::ValueError("The source face could not be resolved.");
+    }
+    // OCCT builders can update shared edge curves. Work on independent geometry.
+    auto copy = shape.makeElementCopy();
+    copy.locate(TopLoc_Location());
+    if (!isSingleSolid(copy.getShape()) || !BRepCheck_Analyzer(copy.getShape()).IsValid()) {
+        throw Base::ValueError("Select a face of one valid solid.");
+    }
+    face = copy.getSubTopoShape(TopAbs_FACE, index);
+    return copy;
+}
+
+struct Bore
+{
+    gp_Ax2 start;
+    double radius;
+    double depth;
+};
+
+Bore describeBore(const TopoDS_Face& face)
+{
+    constexpr double fullTurn = 2 * std::numbers::pi;
+    const BRepAdaptor_Surface surface(face);
+    if (surface.GetType() != GeomAbs_Cylinder
+        || std::abs(surface.LastUParameter() - surface.FirstUParameter() - fullTurn) > angularTolerance) {
+        throw Base::ValueError("Select one complete cylindrical hole wall.");
+    }
+    const auto cylinder = surface.Cylinder();
+    const auto axis = cylinder.Axis().Direction();
+    const double first = surface.FirstVParameter();
+    const double last = surface.LastVParameter();
+    const double depth = last - first;
+    const double radius = cylinder.Radius();
+    GProp_GProps properties;
+    BRepGProp::SurfaceProperties(face, properties);
+    const double area = fullTurn * radius * depth;
+    if (!std::isfinite(area) || depth <= holeTolerance || radius <= holeTolerance
+        || std::abs(properties.Mass() - area) > holeTolerance * (depth + radius)) {
+        throw Base::ValueError("Select one complete cylindrical hole wall.");
+    }
+    gp_Pnt point;
+    gp_Vec du, dv;
+    surface.D1((surface.FirstUParameter() + surface.LastUParameter()) / 2,
+               (first + last) / 2, point, du, dv);
+    auto normal = du.Crossed(dv);
+    if (face.Orientation() == TopAbs_REVERSED) {
+        normal.Reverse();
+    }
+    if (normal.Dot(gp_Vec(cylinder.Location(), point)) >= 0) {
+        throw Base::ValueError("Select an internal hole wall.");
+    }
+    const auto start = cylinder.Location().Translated(gp_Vec(axis) * first);
+    return {gp_Ax2(start, axis, cylinder.Position().XDirection()), radius, depth};
+}
+
+bool hasPlanarBoreEnds(const TopoDS_Shape& solid, const TopoDS_Face& wall, const Bore& bore)
+{
+    TopTools_IndexedDataMapOfShapeListOfShape facesByEdge;
+    TopExp::MapShapesAndUniqueAncestors(solid, TopAbs_EDGE, TopAbs_FACE, facesByEdge);
+    bool atStart = false;
+    bool atEnd = false;
+    for (TopExp_Explorer edges(wall, TopAbs_EDGE); edges.More(); edges.Next()) {
+        const auto edge = TopoDS::Edge(edges.Current());
+        if (BRep_Tool::IsClosed(edge, wall)) {
+            continue;
+        }
+        const auto& adjacent = facesByEdge.FindFromKey(edge);
+        if (adjacent.Extent() != 2) {
+            return false;
+        }
+        const auto& other = adjacent.First().IsSame(wall) ? adjacent.Last() : adjacent.First();
+        const BRepAdaptor_Surface neighbor(TopoDS::Face(other));
+        const BRepAdaptor_Curve curve(edge);
+        if (neighbor.GetType() != GeomAbs_Plane || curve.GetType() != GeomAbs_Circle
+            || !neighbor.Plane().Axis().Direction().IsParallel(bore.start.Direction(), angularTolerance)) {
+            return false;
+        }
+        const double axial = gp_Vec(bore.start.Location(), curve.Circle().Location())
+                                 .Dot(gp_Vec(bore.start.Direction()));
+        atStart |= std::abs(axial) <= holeTolerance;
+        atEnd |= std::abs(axial - bore.depth) <= holeTolerance;
+    }
+    return atStart && atEnd;
+}
+
+bool hasResizedWall(const TopoDS_Shape& shape, const Bore& original, double radius)
+{
+    const gp_Lin axis(original.start.Axis());
+    const auto center = original.start.Location().Translated(
+        gp_Vec(original.start.Direction()) * (original.depth / 2)
+    );
+    for (TopExp_Explorer faces(shape, TopAbs_FACE); faces.More(); faces.Next()) {
+        const auto& face = TopoDS::Face(faces.Current());
+        const BRepAdaptor_Surface surface(face);
+        if (surface.GetType() != GeomAbs_Cylinder
+            || std::abs(surface.Cylinder().Radius() - radius) > holeTolerance
+            || axis.Distance(surface.Cylinder().Location()) > holeTolerance
+            || !surface.Cylinder().Axis().Direction().IsParallel(axis.Direction(), angularTolerance)) {
+            continue;
+        }
+        GProp_GProps properties;
+        BRepGProp::SurfaceProperties(face, properties);
+        if (std::abs(properties.Mass() - 2 * std::numbers::pi * radius * original.depth)
+                <= holeTolerance * (radius + original.depth)
+            && properties.CentreOfMass().Distance(center) <= holeTolerance) {
+            const auto resized = describeBore(face);
+            return std::abs(resized.depth - original.depth) <= holeTolerance
+                && hasPlanarBoreEnds(shape, face, resized);
+        }
+    }
+    return false;
+}
+
 bool hasMovedFace(
     const TopoDS_Shape& result,
     const gp_Pnt& expectedCenter,
@@ -146,7 +270,7 @@ PROPERTY_SOURCE(Part::SvenPlanarOffset, Part::Feature)
 
 SvenPlanarOffset::SvenPlanarOffset()
 {
-    ADD_PROPERTY_TYPE(Support, (nullptr), "Offset", App::Prop_None, "Source solid and planar face");
+    ADD_PROPERTY_TYPE(Support, (nullptr), "Offset", App::Prop_None, "Source solid and selected face");
     ADD_PROPERTY_TYPE(Offset, (1.0), "Offset", App::Prop_None, "Signed distance from the source face");
     Placement.setStatus(App::Property::ReadOnly, true);
 }
@@ -172,20 +296,9 @@ TopoShape SvenPlanarOffset::calculate(const Feature& source, const char* faceNam
         throw Base::ValueError("Enter a non-zero offset distance.");
     }
 
-    const auto& sourceShape = source.Shape.getShape();
-    const auto originalFace = sourceShape.getSubTopoShape(faceName, true);
-    const auto faceIndex = originalFace.isNull() ? 0 : sourceShape.findShape(originalFace.getShape());
-    if (faceIndex <= 0 || originalFace.getShape().ShapeType() != TopAbs_FACE) {
-        throw Base::ValueError("The source face could not be resolved.");
-    }
-    // OCCT's prism builder adds p-curves to its input edges. Give it independent topology and geometry.
-    auto solid = sourceShape.makeElementCopy();
-    solid.locate(TopLoc_Location());
+    TopoShape faceShape;
+    auto solid = copySolidAndFace(source, faceName, faceShape);
     const auto& base = solid.getShape();
-    if (!isSingleSolid(base) || !BRepCheck_Analyzer(base).IsValid()) {
-        throw Base::ValueError("Select a face of one valid solid.");
-    }
-    auto faceShape = solid.getSubTopoShape(TopAbs_FACE, faceIndex);
     const auto& face = TopoDS::Face(faceShape.getShape());
     BRepAdaptor_Surface surface(face);
     if (surface.GetType() != GeomAbs_Plane) {
@@ -242,7 +355,7 @@ App::DocumentObjectExecReturn* SvenPlanarOffset::execute()
     }
     try {
         auto* feature = static_cast<Feature*>(source);
-        auto result = calculate(*feature, faces.front().c_str(), Offset.getValue());
+        auto result = buildResult(*feature, faces.front().c_str());
         Placement.setValueIfChanged(feature->Placement.getValue());
         copyMaterial(feature);
         Shape.setValue(result);
@@ -256,4 +369,67 @@ App::DocumentObjectExecReturn* SvenPlanarOffset::execute()
             error.GetMessageString() ? error.GetMessageString() : "The planar offset failed."
         );
     }
+}
+
+TopoShape SvenPlanarOffset::buildResult(const Feature& source, const char* faceName) const
+{
+    return calculate(source, faceName, Offset.getValue());
+}
+
+PROPERTY_SOURCE(Part::SvenHoleResize, Part::SvenPlanarOffset)
+
+SvenHoleResize::SvenHoleResize()
+{
+    ADD_PROPERTY_TYPE(Diameter, (1.0), "Hole", App::Prop_None, "New bore diameter");
+    Offset.setStatus(App::Property::Hidden, true);
+}
+
+TopoShape SvenHoleResize::calculate(const Feature& source, const char* faceName, double diameter)
+{
+    if (!std::isfinite(diameter) || diameter <= 2 * holeTolerance) {
+        throw Base::ValueError("Enter a positive hole diameter.");
+    }
+    TopoShape face;
+    auto solid = copySolidAndFace(source, faceName, face);
+    const auto& base = solid.getShape();
+    const auto& wall = TopoDS::Face(face.getShape());
+    const auto bore = describeBore(wall);
+    if (!hasPlanarBoreEnds(base, wall, bore)) {
+        throw Base::ValueError("The hole wall must end at two perpendicular planar faces.");
+    }
+
+    const double radius = diameter / 2;
+    const double change = radius - bore.radius;
+    if (std::abs(change) <= holeTolerance) {
+        throw Base::ValueError("Enter a diameter different from the current diameter.");
+    }
+    // Overlap the existing void or stock radially while keeping both axial limits exact.
+    const double overlap = std::clamp(std::abs(change) / 10, 2 * holeTolerance, 1e-4);
+    const double outerRadius = change > 0 ? radius : bore.radius + overlap;
+    const double innerRadius = change > 0 ? std::max(bore.radius / 2, bore.radius - overlap) : radius;
+    const TopoShape outer(BRepPrimAPI_MakeCylinder(bore.start, outerRadius, bore.depth).Shape());
+    const TopoShape inner(BRepPrimAPI_MakeCylinder(bore.start, innerRadius, bore.depth).Shape());
+    const auto ring = outer.makeElementCut(inner);
+    const auto result = (change > 0 ? solid.makeElementCut(ring) : solid.makeElementFuse(ring))
+                            .makeElementRefine();
+    const auto& shape = result.getShape();
+    const double expected = -std::numbers::pi * change * (radius + bore.radius) * bore.depth;
+    const double tolerance = std::max(std::abs(expected) * 1e-7,
+                                      2 * std::numbers::pi * bore.radius * bore.depth * holeTolerance);
+    if (!isSingleSolid(shape) || !BRepCheck_Analyzer(shape).IsValid()
+        || std::abs(volume(shape) - volume(base) - expected) > tolerance
+        || !hasResizedWall(shape, bore, radius)) {
+        throw Base::ValueError("The new diameter would alter nearby geometry or open the side wall.");
+    }
+    return result;
+}
+
+short SvenHoleResize::mustExecute() const
+{
+    return Diameter.isTouched() || SvenPlanarOffset::mustExecute();
+}
+
+TopoShape SvenHoleResize::buildResult(const Feature& source, const char* faceName) const
+{
+    return calculate(source, faceName, Diameter.getValue());
 }

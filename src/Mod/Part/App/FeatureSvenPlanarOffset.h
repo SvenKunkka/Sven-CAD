@@ -24,6 +24,25 @@ public:
 
     short mustExecute() const override;
     App::DocumentObjectExecReturn* execute() override;
+
+protected:
+    virtual TopoShape buildResult(const Feature& source, const char* faceName) const;
+};
+
+class PartExport SvenHoleResize: public SvenPlanarOffset
+{
+    PROPERTY_HEADER_WITH_OVERRIDE(Part::SvenHoleResize);
+
+public:
+    SvenHoleResize();
+
+    App::PropertyLength Diameter;
+
+    static TopoShape calculate(const Feature& source, const char* faceName, double diameter);
+    short mustExecute() const override;
+
+protected:
+    TopoShape buildResult(const Feature& source, const char* faceName) const override;
 };
 
 }  // namespace Part

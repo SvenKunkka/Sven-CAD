@@ -535,6 +535,7 @@ PyMOD_INIT_FUNC(Part)
     Part::Offset2D              ::init();
 #ifdef FREECAD_PERSONAL_CAD
     Part::SvenPlanarOffset      ::init();
+    Part::SvenHoleResize        ::init();
 #endif
     Part::Thickness             ::init();
     Part::Refine                ::init();

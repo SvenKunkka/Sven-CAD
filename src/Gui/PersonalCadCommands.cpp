@@ -188,7 +188,7 @@ public:
         : ModelingCommand(
               "PersonalCAD_PressPull",
               QT_TRANSLATE_NOOP("PersonalCadCommands", "Press Pull"),
-              QT_TRANSLATE_NOOP("PersonalCadCommands", "Extrudes profiles, fillets edges, or offsets a planar STEP face"),
+              QT_TRANSLATE_NOOP("PersonalCadCommands", "Extrudes profiles, fillets edges, offsets planar faces, or resizes cylindrical holes"),
               "Part_Extrude"
           )
     {
@@ -249,7 +249,7 @@ protected:
         getMainWindow()->showMessage(
             QCoreApplication::translate(
                 "PersonalCadCommands",
-                "Select a sketch profile, edges from one body, or one planar face on a STEP solid."
+                "Select a sketch profile, edges from one body, or one face on a STEP solid."
             ),
             5000
         );

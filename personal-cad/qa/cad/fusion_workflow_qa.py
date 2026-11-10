@@ -185,10 +185,68 @@ def run_macro():
         Gui.activeDocument().resetEdit()
         App.closeDocument(assembly_doc.Name)
 
-    def check_planar_offset():
-        import ImportGui
+    def face_edit_state(doc, source):
+        return (tuple(obj.Name for obj in doc.Objects), doc.UndoCount, doc.RedoCount,
+                source.ViewObject.Visibility, source.Shape.exportBrepToString())
+
+    def try_face_edit(doc, source, face_index, distance, valid, apply=False, actual_shortcut=False):
         from pivy import coin
 
+        group = source.getParentGeoFeatureGroup()
+        path = f"{source.Name}.Face{face_index}" if group else f"Face{face_index}"
+        select(doc.Name, group.Name if group else source.Name, path)
+        initial = face_edit_state(doc, source)
+        view = Gui.activeDocument().activeView()
+
+        def preview_present():
+            search = coin.SoSearchAction()
+            search.setName("SvenPlanarOffsetPreview")
+            search.apply(view.getSceneGraph())
+            return bool(search.getPath())
+
+        observations = []
+        poll = QtCore.QTimer()
+
+        def inspect():
+            dialog = window.findChild(QtWidgets.QDialog, "SvenPlanarOffsetDialog")
+            if dialog is None or not dialog.isVisible():
+                return
+            poll.stop()
+            try:
+                spin = widget(dialog, QtWidgets.QDoubleSpinBox, "SvenPlanarOffsetDistance")
+                buttons = dialog.findChild(QtWidgets.QDialogButtonBox)
+                ok = buttons.button(QtWidgets.QDialogButtonBox.StandardButton.Ok)
+                spin.setValue(distance)
+                wait(260)
+                status = dialog.findChild(QtWidgets.QLabel, "SvenPlanarOffsetStatus").text()
+                require(ok.isEnabled() == valid, f"Unexpected validity at {distance} mm: {status}")
+                require(preview_present() == valid, "The Coin preview did not match validity")
+                require(face_edit_state(doc, source) == initial, "Preview changed document or source geometry")
+                observations.append(True)
+                if apply:
+                    ok.click()
+                else:
+                    buttons.button(QtWidgets.QDialogButtonBox.StandardButton.Cancel).click()
+            except Exception:
+                observations.append(traceback.format_exc())
+                dialog.reject()
+
+        poll.timeout.connect(inspect)
+        poll.start(30)
+        if actual_shortcut:
+            press(key.Key_Q)
+        else:
+            Gui.runCommand("PersonalCAD_PressPull")
+            wait(220)
+        poll.stop()
+        require(observations == [True], f"Q did not complete the face edit dialog: {observations}")
+        require(not preview_present(), "Preview survived closing the dialog")
+        require(Gui.activeWorkbench().name() == "PartDesignWorkbench", "Q switched workbenches")
+        if not apply:
+            require(face_edit_state(doc, source) == initial, "Cancel or invalid input changed the model")
+
+    def check_planar_offset():
+        import ImportGui
         Gui.activateWorkbench("PartDesignWorkbench")
         doc = App.newDocument("SvenPlanarOffsetQA")
         doc.UndoMode = 1
@@ -203,8 +261,6 @@ def run_macro():
             group.addObject(source)
         top, = [i for i, face in enumerate(source.Shape.Faces, 1)
                 if isinstance(face.Surface, Part.Plane) and math.isclose(face.CenterOfMass.z, 6)]
-        cylinder, = [i for i, face in enumerate(source.Shape.Faces, 1)
-                     if isinstance(face.Surface, Part.Cylinder)]
         source.Placement = App.Placement(App.Vector(3, 4, 2), App.Rotation(App.Vector(1, 0, 0), 25))
         group.Placement = App.Placement(App.Vector(21, -11, 5), App.Rotation(App.Vector(0, 1, 0), 33))
         source.ViewObject.DiffuseColor = [
@@ -215,70 +271,16 @@ def run_macro():
         view = Gui.activeDocument().activeView()
         view.fitAll()
 
-        def preview_present():
-            search = coin.SoSearchAction()
-            search.setName("SvenPlanarOffsetPreview")
-            search.apply(view.getSceneGraph())
-            return bool(search.getPath())
-
-        def state():
-            return (tuple(obj.Name for obj in doc.Objects), doc.UndoCount, doc.RedoCount,
-                    source.ViewObject.Visibility, source.Shape.exportBrepToString())
-
-        def try_offset(face_index, distance, valid, apply=False, actual_shortcut=False):
-            select(doc.Name, group.Name, f"{source.Name}.Face{face_index}")
-            initial = state()
-            observations = []
-            poll = QtCore.QTimer()
-
-            def inspect():
-                dialog = window.findChild(QtWidgets.QDialog, "SvenPlanarOffsetDialog")
-                if dialog is None or not dialog.isVisible():
-                    return
-                poll.stop()
-                try:
-                    spin = widget(dialog, QtWidgets.QDoubleSpinBox, "SvenPlanarOffsetDistance")
-                    buttons = dialog.findChild(QtWidgets.QDialogButtonBox)
-                    ok = buttons.button(QtWidgets.QDialogButtonBox.StandardButton.Ok)
-                    spin.setValue(distance)
-                    wait(220)
-                    require(ok.isEnabled() == valid, f"Unexpected offset validity for {distance} mm")
-                    require(preview_present() == valid, "The Coin preview did not match offset validity")
-                    require(state() == initial, "Preview changed document objects, undo, or source geometry")
-                    observations.append(True)
-                    if apply:
-                        ok.click()
-                    else:
-                        buttons.button(QtWidgets.QDialogButtonBox.StandardButton.Cancel).click()
-                except Exception:
-                    observations.append(traceback.format_exc())
-                    dialog.reject()
-
-            poll.timeout.connect(inspect)
-            poll.start(30)
-            if actual_shortcut:
-                press(key.Key_Q)
-            else:
-                Gui.runCommand("PersonalCAD_PressPull")
-                wait(220)
-            poll.stop()
-            require(observations == [True], f"Q did not complete the offset dialog: {observations}")
-            require(not preview_present(), "Offset preview survived closing the dialog")
-            require(Gui.activeWorkbench().name() == "PartDesignWorkbench", "Q switched workbenches")
-            if not apply:
-                require(state() == initial, "Cancel or invalid input changed the model")
-
-        try_offset(top, 2, valid=True, actual_shortcut=True)
-        try_offset(top, -1.5, valid=True)
-        try_offset(top, -6, valid=False)
-        try_offset(cylinder, 1, valid=False)
-        original = state()
+        try_face_edit(doc, source, top, 2, valid=True, actual_shortcut=True)
+        try_face_edit(doc, source, top, -1.5, valid=True)
+        try_face_edit(doc, source, top, -6, valid=False)
+        original = face_edit_state(doc, source)
         source_face = source.Shape.Faces[top - 1]
         face_area = source_face.Area
         expected_cap = source_face.CenterOfMass + 1.25 * source_face.normalAt(0, 0)
         source_cap_color = tuple(source.ViewObject.DiffuseColor[top - 1])
         original_volume = source.Shape.Volume
-        try_offset(top, 1.25, valid=True, apply=True)
+        try_face_edit(doc, source, top, 1.25, valid=True, apply=True)
         result, = [obj for obj in doc.Objects if obj.TypeId == "Part::SvenPlanarOffset"]
         result_name, source_name, group_name = result.Name, source.Name, group.Name
         require(result.getParentGeoFeatureGroup() == group
@@ -327,6 +329,95 @@ def run_macro():
         }
         App.closeDocument(restored.Name)
 
+    def check_cylindrical_holes():
+        import ImportGui
+
+        Gui.activateWorkbench("PartDesignWorkbench")
+        block = Part.makeBox(12, 10, 8)
+        axis = App.Vector(5, 5, 0)
+
+        def open_step(name, shape):
+            doc = App.newDocument(name)
+            doc.UndoMode = 1
+            step = output / (name + ".step")
+            shape.exportStep(str(step))
+            ImportGui.insert(str(step), doc.Name, merge=False, useLinkGroup=False)
+            source, = [obj for obj in doc.Objects if obj.TypeId == "Part::Feature"]
+            doc.recompute()
+            Gui.activeDocument().activeView().fitAll()
+            return doc, source
+
+        def cylinder_index(shape):
+            return next(i for i, f in enumerate(shape.Faces, 1)
+                        if isinstance(f.Surface, Part.Cylinder))
+
+        def measure(shape, diameter, depth, center, direction, volume):
+            require(shape.isValid() and len(shape.Solids) == 1, "Expected one valid solid")
+            wall = shape.Faces[cylinder_index(shape) - 1]
+            require(math.isclose(2 * wall.Surface.Radius, diameter, abs_tol=1e-6), "Wrong diameter")
+            require(math.isclose(wall.Area / (math.pi * diameter), depth, abs_tol=1e-6), "Wrong depth")
+            require(wall.CenterOfMass.distanceToPoint(center) < 1e-6, "Bore center or depth moved")
+            require(abs(wall.Surface.Axis.dot(direction)) > 1 - 1e-8, "Bore axis moved")
+            require(math.isclose(shape.Volume, volume, abs_tol=1e-5), "Unexpected volume change")
+
+        for name, start, depth, diameter in (("ThroughHole", 0, 8, 5.0), ("BlindHole", 3, 5, 2.0)):
+            doc, source = open_step(name, block.cut(Part.makeCylinder(1.5, depth, axis + App.Vector(0, 0, start))))
+            if name == "ThroughHole":
+                group = source.getParentGeoFeatureGroup()
+                if group is None:
+                    group = doc.addObject("App::Part", "ImportedPart")
+                    group.addObject(source)
+                group.Placement = App.Placement(App.Vector(2, -3, 8), App.Rotation(App.Vector(1, 0, 0), 25))
+                source.Placement = App.Placement(App.Vector(3, 1, 2), App.Rotation(App.Vector(0, 1, 0), 30))
+                doc.recompute()
+            face_index = cylinder_index(source.Shape)
+            wall = source.Shape.Faces[face_index - 1]
+            center, direction = wall.CenterOfMass, wall.Surface.Axis
+            before = face_edit_state(doc, source)
+            original_volume = source.Shape.Volume
+            expected_volume = original_volume - math.pi * (diameter**2 - 9) * depth / 4
+            try_face_edit(doc, source, face_index, diameter, valid=True,
+                          actual_shortcut=name == "ThroughHole")
+            try_face_edit(doc, source, face_index, 14, valid=False)
+            try_face_edit(doc, source, face_index, 3, valid=False)
+            try_face_edit(doc, source, face_index, diameter, valid=True, apply=True)
+            result, = [obj for obj in doc.Objects if obj.TypeId == "Part::SvenHoleResize"]
+            result_name, source_name = result.Name, source.Name
+            measure(result.Shape, diameter, depth, center, direction, expected_volume)
+            require(result.getGlobalPlacement().isSame(source.getGlobalPlacement(), 1e-9), "Placement changed")
+            require(doc.UndoCount == before[1] + 1, "Resize must create exactly one undo entry")
+            doc.undo()
+            require(doc.getObject(result_name) is None and source.ViewObject.Visibility
+                    and source.Shape.exportBrepToString() == before[-1], "Undo failed to restore source")
+            doc.redo()
+            result = doc.getObject(result_name)
+            measure(result.Shape, diameter, depth, center, direction, expected_volume)
+            native = output / (name + ".FCStd")
+            doc.saveAs(str(native))
+            App.closeDocument(doc.Name)
+            doc = App.openDocument(str(native))
+            result = doc.getObject(result_name)
+            require(result.Support[0].Name == source_name, "Support lost after reopen")
+            measure(result.Shape, diameter, depth, center, direction, expected_volume)
+            result.Diameter = 4
+            doc.recompute()
+            updated = original_volume - math.pi * (16 - 9) * depth / 4
+            measure(result.Shape, 4, depth, center, direction, updated)
+            step = output / (name + "-resized.step")
+            result.Shape.exportStep(str(step))
+            measure(Part.read(str(step)), 4, depth, center, direction, updated)
+            checks[name] = {"original_diameter_mm": 3, "new_diameter_mm": diameter, "depth_mm": depth,
+                            "undo_redo_reopen": True, "edited_and_step_roundtrip_diameter_mm": 4}
+            App.closeDocument(doc.Name)
+
+        chamfered = Part.makeCylinder(1.5, 8, axis).fuse(
+            Part.makeCone(1.5, 2.2, 0.7, axis + App.Vector(0, 0, 7.3))).removeSplitter()
+        for name, shape in (("ChamferedHole", block.cut(chamfered)), ("OuterCylinder", Part.makeCylinder(1.5, 8))):
+            doc, source = open_step(name, shape)
+            try_face_edit(doc, source, cylinder_index(source.Shape), 4, valid=False)
+            App.closeDocument(doc.Name)
+        checks["Q_rejects_chamfer_and_exterior"] = True
+
     def finish():
         (output / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
         if report["status"] == "passed":
@@ -338,6 +429,7 @@ def run_macro():
         try:
             check_shortcuts({"PersonalCAD_PressPull": "Q"})
             check_planar_offset()
+            check_cylindrical_holes()
             report["status"] = "passed"
         except Exception:
             report["error"] = traceback.format_exc()
@@ -532,6 +624,7 @@ def run_macro():
             App.closeDocument(doc.Name)
             print("QA phase: Q planar STEP offset", file=sys.stderr, flush=True)
             check_planar_offset()
+            check_cylindrical_holes()
             if preview:
                 checks["L_R_C_open_and_cancel_native_picker"] = "skipped by --skip-outer"
             else:
@@ -562,7 +655,7 @@ def main():
     parser.add_argument("--require-no-main-thread-warnings", action="store_true",
                         help="Fail if a GUI API reports being called outside the main thread")
     parser.add_argument("--only-q-offset", action="store_true",
-                        help="Exercise the planar STEP offset and its Q binding in isolation")
+                        help="Exercise the STEP face edits and their Q binding in isolation")
     args = parser.parse_args()
     app = args.app.resolve()
     info = plistlib.loads((app / "Contents/Info.plist").read_bytes())

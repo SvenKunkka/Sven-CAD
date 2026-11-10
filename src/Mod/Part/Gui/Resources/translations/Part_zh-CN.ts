@@ -8,20 +8,20 @@
       <translation>平面偏移</translation>
     </message>
     <message>
-      <source>Offsets a planar face of one STEP solid</source>
-      <translation>偏移单个 STEP 实体的平面</translation>
+      <source>Offsets a plane or resizes a cylindrical hole on a STEP solid</source>
+      <translation>偏移 STEP 实体平面或修改圆柱孔径</translation>
     </message>
     <message>
       <source>Distance</source>
       <translation>距离</translation>
     </message>
     <message>
-      <source>Select one planar face on a STEP solid.</source>
-      <translation>请选择 STEP 实体上的一个平面。</translation>
+      <source>Select a planar face or cylindrical hole wall on a STEP solid.</source>
+      <translation>请选择 STEP 实体上的平面或圆柱孔壁。</translation>
     </message>
     <message>
-      <source>Show the source solid before offsetting its face.</source>
-      <translation>偏移前请先显示源实体。</translation>
+      <source>Show the source solid before editing its face.</source>
+      <translation>编辑前请先显示源实体。</translation>
     </message>
     <message>
       <source>The source face is no longer available.</source>
@@ -32,16 +32,32 @@
       <translation>正值向外偏移，负值向内偏移。</translation>
     </message>
     <message>
-      <source>The geometry engine could not preview this offset.</source>
-      <translation>无法预览此偏移。</translation>
+      <source>The geometry engine could not preview this edit.</source>
+      <translation>几何内核无法预览此编辑。</translation>
     </message>
     <message>
       <source>The source or document changed before confirmation.</source>
       <translation>确认前源面或文档发生了变化。</translation>
     </message>
     <message>
-      <source>The planar offset could not be applied.</source>
-      <translation>无法应用平面偏移。</translation>
+      <source>The face edit could not be applied.</source>
+      <translation>无法应用面编辑。</translation>
+    </message>
+    <message>
+      <source>Resize Cylindrical Hole</source>
+      <translation>圆柱孔改径</translation>
+    </message>
+    <message>
+      <source>Current diameter</source>
+      <translation>当前孔径</translation>
+    </message>
+    <message>
+      <source>New diameter</source>
+      <translation>目标孔径</translation>
+    </message>
+    <message>
+      <source>The hole axis and depth are preserved.</source>
+      <translation>孔轴线和孔深保持不变。</translation>
     </message>
   </context>
   <context>
@@ -77,6 +93,30 @@
     <message>
       <source>The offset intersects other geometry or crosses the opposite wall.</source>
       <translation>偏移与其他几何相交，或越过了对侧壁。</translation>
+    </message>
+    <message>
+      <source>Select one complete cylindrical hole wall.</source>
+      <translation>请选择一个完整的圆柱孔壁。</translation>
+    </message>
+    <message>
+      <source>Select an internal hole wall.</source>
+      <translation>请选择内孔壁。</translation>
+    </message>
+    <message>
+      <source>Enter a positive hole diameter.</source>
+      <translation>请输入大于零的孔径。</translation>
+    </message>
+    <message>
+      <source>The hole wall must end at two perpendicular planar faces.</source>
+      <translation>孔壁两端必须与垂直于孔轴的平面相接。</translation>
+    </message>
+    <message>
+      <source>Enter a diameter different from the current diameter.</source>
+      <translation>请输入与当前孔径不同的数值。</translation>
+    </message>
+    <message>
+      <source>The new diameter would alter nearby geometry or open the side wall.</source>
+      <translation>目标孔径会影响邻近几何或打穿侧壁。</translation>
     </message>
   </context>
   <context>

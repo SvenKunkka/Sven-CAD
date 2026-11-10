@@ -551,7 +551,9 @@ def run_macro():
             wait_views(page)
             reopened = {c.Name: (list(c.Text), list(c.CosmeticTags), c.Signature)
                         for v in views.values() for c in D.callouts(v)}
-            require(reopened == snapshot, "callouts changed on reopen")
+            require(reopened == snapshot, ("callouts changed on reopen",
+                    {k: (snapshot.get(k), reopened.get(k)) for k in set(snapshot) | set(reopened)
+                     if snapshot.get(k) != reopened.get(k)}))
             require(all(D._has_edge(c.SourceView, t) for v in views.values() for c in D.callouts(v)
                         for t in c.CosmeticTags), "cosmetic edges lost on reopen")
             require(list(D.page_bom(page).BomRows) == rows, "BOM changed on reopen")

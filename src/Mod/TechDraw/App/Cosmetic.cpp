@@ -276,6 +276,18 @@ void CosmeticEdge::Restore(Base::XMLReader &reader)
     } else {
         Base::Console().warning("CE::Restore - unimplemented geomType: {}\n", static_cast<int>(gType));
     }
+#ifdef FREECAD_PERSONAL_CAD
+    // The edge's own tag is not saved, only the copy in its geometry. Take that copy back so
+    // a tag held by a document object still names the same edge after reopening.
+    if (m_geometry && !m_geometry->getCosmeticTag().empty()) {
+        try {
+            setTag(Tag::fromString(m_geometry->getCosmeticTag()));
+        }
+        catch (const std::runtime_error&) {
+            m_geometry->setCosmeticTag(getTagAsString());
+        }
+    }
+#endif
     // older documents may not have the LineNumber element, so we need to check the
     // next entry.  if it is a start element, then we check if it is a start element
     // for LineNumber.

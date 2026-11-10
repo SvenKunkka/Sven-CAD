@@ -421,9 +421,13 @@ def run_macro():
         checks["Q_rejects_chamfer_and_exterior"] = True
 
     def check_q_references():
+        import Assembly
         import ImportGui
+        import JointObject
         import Measure
         import Sketcher
+        import TechDraw
+        from models import drawing_page, wait_for_edges
 
         Gui.activateWorkbench("PartDesignWorkbench")
         doc = App.newDocument("QReferences")
@@ -465,11 +469,51 @@ def run_macro():
         measurement.Element = (bore, [select_face(bore, Part.Cylinder)])
         doc.recompute()
 
+        assembly = doc.addObject("Assembly::AssemblyObject", "Assembly")
+        joints = assembly.newObject("Assembly::JointGroup", "Joints")
+        base = assembly.newObject("App::Link", "OffsetLink")
+        base.LinkedObject = planar
+        lid = doc.addObject("Part::Box", "Lid")
+        lid_link = assembly.newObject("App::Link", "LidLink")
+        lid_link.LinkedObject = lid
+        joint = joints.newObject("App::FeaturePython", "Fixed")
+        JointObject.Joint(joint, JointObject.JointTypes.index("Fixed"))
+        JointObject.ViewProviderJoint(joint.ViewObject)
+        joint.Detach1 = True
+        joint.Detach2 = True
+        cap = select_face(planar, Part.Plane, 9)
+        joint.Reference1 = (base, [cap, cap])
+        joint.Reference2 = (lid_link, ["Face1", "Face1"])
+        doc.recompute()
+
+        page = drawing_page(doc, "QDrawing", "QTemplate")
+        view = doc.addObject("TechDraw::DrawViewPart", "BoreTop")
+        view.Source = [bore]
+        view.Direction = (0, 0, 1)
+        page.addView(view)
+        doc.recompute()
+        wait_for_edges(view)
+        circle = next(f"Edge{i}" for i, edge in enumerate(view.getVisibleEdges(), 1)
+                      if isinstance(edge.Curve, Part.Circle))
+        dimension = doc.addObject("TechDraw::DrawViewDimension", "BoreDiameter")
+        dimension.Type = "Diameter"
+        dimension.References2D = [(view, [circle])]
+        dimension.References3D = [(bore, [select_face(bore, Part.Cylinder)])]
+        dimension.MeasureType = "True"
+        page.addView(dimension)
+        doc.recompute()
+
         def verify(z, diameter):
             require(sketch.isValid() and math.isclose(sketch.Placement.Base.z, z, abs_tol=1e-6),
                     f"Sketch lost or changed the supporting plane: {sketch.State}")
             require(measurement.isValid() and math.isclose(measurement.Diameter.Value, diameter, abs_tol=1e-6),
                     f"Measure lost or changed the bore: {measurement.State}")
+            placement = joint.Proxy.findPlacement(joint, joint.Reference1)
+            require(math.isclose(placement.Base.z, z, abs_tol=1e-6),
+                    f"Assembly connector lost or changed the cap: {placement.Base}")
+            wait_for_edges(view)
+            require(math.isclose(dimension.getRawValue(), diameter, abs_tol=1e-6),
+                    f"TechDraw diameter changed reference: {dimension.getRawValue()}")
 
         verify(9, 5)
         planar.Offset = -2
@@ -477,16 +521,19 @@ def run_macro():
         doc.recompute()
         verify(6, 2)
         native = output / "QReferences.FCStd"
-        names = [obj.Name for obj in (source, planar, bore, sketch, measurement)]
+        names = [obj.Name for obj in (source, planar, bore, sketch, measurement, joint, view, dimension)]
         doc.saveAs(str(native))
         App.closeDocument(doc.Name)
         doc = App.openDocument(str(native))
-        source, planar, bore, sketch, measurement = [doc.getObject(name) for name in names]
+        source, planar, bore, sketch, measurement, joint, view, dimension = (
+            doc.getObject(name) for name in names
+        )
         planar.Offset = 2
         bore.Diameter = 4
         doc.recompute()
         verify(10, 4)
 
+        doc.QDrawing.ViewObject.hide()
         source.Shape = stock(10)
         doc.recompute()
         require(not planar.isValid() and not bore.isValid(), "Changed source was silently reused")
@@ -502,9 +549,72 @@ def run_macro():
         checks["Q_stable_face_references"] = {
             "sketch_plane_z_mm": [9, 6, 10],
             "measured_bore_mm": [5, 2, 4],
+            "assembly_connector_z_mm": [9, 6, 10],
+            "techdraw_diameter_mm": [5, 2, 4],
             "recomputed_after_reopen": True,
             "changed_source_rejected": True,
             "explicit_reselect": True,
+        }
+        App.closeDocument(doc.Name)
+
+    def check_q_reference_failures():
+        doc = App.newDocument("QReferenceFailures")
+        source = doc.addObject("Part::Feature", "Stock")
+        edit = doc.addObject("Part::SvenPlanarOffset", "Offset")
+        stock = Part.makeBox(12, 10, 8)
+        source.Shape = stock
+
+        def top_faces(shape):
+            return [(i, face) for i, face in enumerate(shape.Faces, 1)
+                    if isinstance(face.Surface, Part.Plane) and abs(face.CenterOfMass.z - 8) < 1e-6]
+
+        (top, cap), = top_faces(stock)
+        edit.Support = (source, [f"Face{top}"])
+        doc.recompute()
+        require(edit.isValid(), f"Initial reference failed: {edit.getStatusString()}")
+        identity = edit.SupportIdentity
+
+        reordered = Part.makeSolid(Part.makeShell(list(reversed(stock.Faces))))
+        (new_top, _), = top_faces(reordered)
+        require(reordered.isValid() and new_top != top, "Reordering did not create the intended valid fixture")
+        source.Shape = reordered
+        doc.recompute()
+        require(edit.isValid() and edit.SupportIdentity == identity
+                and edit.Support[1] == [f"Face{new_top}"], "The unchanged face was not remapped uniquely")
+        original = edit.Shape.exportBrepToString()
+
+        split = stock.cut(Part.makeBox(1, 10, 2, App.Vector(6, 0, 7)))
+        require(split.isValid() and len(top_faces(split)) == 2, "The split fixture lacks two top faces")
+        nonmatching = [face for face in stock.Faces if abs(face.CenterOfMass.z - 8) > 1e-6]
+        ambiguous = Part.makeCompound(nonmatching + [cap.copy(), cap.copy()])
+        require(new_top <= len(nonmatching), "The ambiguity fixture must remove the indexed face")
+        for changed, expected in ((split, "changed or disappeared"),
+                                  (ambiguous, "ambiguous"),
+                                  (Part.makeBox(12, 10, 7), "changed or disappeared")):
+            source.Shape = changed
+            doc.recompute()
+            require(not edit.isValid() and expected in edit.getStatusString(),
+                    f"Unexpected reference status: {edit.getStatusString()}")
+            require(edit.Shape.exportBrepToString() == original and edit.SupportIdentity == identity,
+                    "An unresolved reference changed the last valid result")
+
+        doc.removeObject(edit.Name)
+        source.Shape = split
+        edit = doc.addObject("Part::SvenPlanarOffset", "MergeOffset")
+        edit.Support = (source, [f"Face{top_faces(split)[0][0]}"])
+        edit.Offset = -0.5
+        doc.recompute()
+        require(edit.isValid(), f"Initial split face failed: {edit.getStatusString()}")
+        source.Shape = stock
+        doc.recompute()
+        require(not edit.isValid() and "changed or disappeared" in edit.getStatusString(),
+                f"A merged source face was silently reused: {edit.getStatusString()}")
+        checks["Q_source_face_reorder_and_failure"] = {
+            "unique_index_remap": [top, new_top],
+            "split_rejected": True,
+            "ambiguous_rejected": True,
+            "missing_rejected": True,
+            "merged_rejected": True,
         }
         App.closeDocument(doc.Name)
 
@@ -521,6 +631,7 @@ def run_macro():
             check_planar_offset()
             check_cylindrical_holes()
             check_q_references()
+            check_q_reference_failures()
             report["status"] = "passed"
         except Exception:
             report["error"] = traceback.format_exc()
@@ -717,6 +828,7 @@ def run_macro():
             check_planar_offset()
             check_cylindrical_holes()
             check_q_references()
+            check_q_reference_failures()
             if preview:
                 checks["L_R_C_open_and_cancel_native_picker"] = "skipped by --skip-outer"
             else:

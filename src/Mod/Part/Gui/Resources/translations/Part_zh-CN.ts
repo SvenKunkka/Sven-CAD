@@ -59,6 +59,18 @@
       <source>The hole axis and depth are preserved.</source>
       <translation>孔轴线和孔深保持不变。</translation>
     </message>
+    <message>
+      <source>Select the Q edit and a replacement face on its original solid.</source>
+      <translation>请选择 Q 编辑特征和原实体上的替换面。</translation>
+    </message>
+    <message>
+      <source>Select a replacement face of the same type.</source>
+      <translation>请选择同类型的替换面。</translation>
+    </message>
+    <message>
+      <source>Reselect Q Support</source>
+      <translation>重新选择 Q 参考面</translation>
+    </message>
   </context>
   <context>
     <name>SvenPlanarOffset</name>

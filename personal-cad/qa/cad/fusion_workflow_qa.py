@@ -189,12 +189,14 @@ def run_macro():
         return (tuple(obj.Name for obj in doc.Objects), doc.UndoCount, doc.RedoCount,
                 source.ViewObject.Visibility, source.Shape.exportBrepToString())
 
-    def try_face_edit(doc, source, face_index, distance, valid, apply=False, actual_shortcut=False):
+    def try_face_edit(doc, source, face_index, distance, valid, apply=False, actual_shortcut=False, rebind=None):
         from pivy import coin
 
         group = source.getParentGeoFeatureGroup()
         path = f"{source.Name}.Face{face_index}" if group else f"Face{face_index}"
         select(doc.Name, group.Name if group else source.Name, path)
+        if rebind:
+            Gui.Selection.addSelection(doc.Name, rebind.Name)
         initial = face_edit_state(doc, source)
         view = Gui.activeDocument().activeView()
 
@@ -418,6 +420,94 @@ def run_macro():
             App.closeDocument(doc.Name)
         checks["Q_rejects_chamfer_and_exterior"] = True
 
+    def check_q_references():
+        import ImportGui
+        import Measure
+        import Sketcher
+
+        Gui.activateWorkbench("PartDesignWorkbench")
+        doc = App.newDocument("QReferences")
+        doc.UndoMode = 1
+        axis = App.Vector(5, 5, 0)
+
+        def stock(height):
+            return Part.makeBox(12, 10, height).cut(Part.makeCylinder(1.5, height, axis))
+
+        def select_face(obj, surface, z=None):
+            return next("Face" + str(i) for i, f in enumerate(obj.Shape.Faces, 1)
+                        if isinstance(f.Surface, surface)
+                        and (z is None or abs(f.CenterOfMass.z - z) < 1e-6))
+
+        step = output / "QReferenceStock.step"
+        stock(8).exportStep(str(step))
+        ImportGui.insert(str(step), doc.Name, merge=False, useLinkGroup=False)
+        source, = [obj for obj in doc.Objects if obj.TypeId == "Part::Feature"]
+        group = source.getParentGeoFeatureGroup()
+
+        def make_edit(type_name, name, support, prop, value):
+            obj = doc.addObject(type_name, name)
+            if group:
+                group.addObject(obj)
+            obj.Support = (source, [support])
+            setattr(obj, prop, value)
+            doc.recompute()
+            require(obj.isValid(), f"{name} failed initial calculation")
+            return obj
+
+        planar = make_edit("Part::SvenPlanarOffset", "Offset", select_face(source, Part.Plane, 8), "Offset", 1)
+        bore = make_edit("Part::SvenHoleResize", "Bore", select_face(source, Part.Cylinder), "Diameter", 5)
+        sketch = doc.addObject("Sketcher::SketchObject", "Sketch")
+        measurement = doc.addObject("Measure::MeasureDiameter", "Diameter")
+        if group:
+            group.addObject(sketch)
+        sketch.AttachmentSupport = [(planar, select_face(planar, Part.Plane, 9))]
+        sketch.MapMode = "FlatFace"
+        measurement.Element = (bore, [select_face(bore, Part.Cylinder)])
+        doc.recompute()
+
+        def verify(z, diameter):
+            require(sketch.isValid() and math.isclose(sketch.Placement.Base.z, z, abs_tol=1e-6),
+                    f"Sketch lost or changed the supporting plane: {sketch.State}")
+            require(measurement.isValid() and math.isclose(measurement.Diameter.Value, diameter, abs_tol=1e-6),
+                    f"Measure lost or changed the bore: {measurement.State}")
+
+        verify(9, 5)
+        planar.Offset = -2
+        bore.Diameter = 2
+        doc.recompute()
+        verify(6, 2)
+        native = output / "QReferences.FCStd"
+        names = [obj.Name for obj in (source, planar, bore, sketch, measurement)]
+        doc.saveAs(str(native))
+        App.closeDocument(doc.Name)
+        doc = App.openDocument(str(native))
+        source, planar, bore, sketch, measurement = [doc.getObject(name) for name in names]
+        planar.Offset = 2
+        bore.Diameter = 4
+        doc.recompute()
+        verify(10, 4)
+
+        source.Shape = stock(10)
+        doc.recompute()
+        require(not planar.isValid() and not bore.isValid(), "Changed source was silently reused")
+        source.ViewObject.Visibility = True
+        planar.ViewObject.Visibility = False
+        bore.ViewObject.Visibility = False
+        top = int(select_face(source, Part.Plane, 10)[4:])
+        try_face_edit(doc, source, top, 2, valid=True, apply=True, rebind=planar)
+        doc.recompute()
+        require(planar.isValid() and select_face(planar, Part.Plane, 12), "Explicit reselect did not repair the edit")
+        require(not sketch.isValid() or not math.isclose(sketch.Placement.Base.z, 12, abs_tol=1e-6),
+                "Downstream sketch silently adopted a different source face")
+        checks["Q_stable_face_references"] = {
+            "sketch_plane_z_mm": [9, 6, 10],
+            "measured_bore_mm": [5, 2, 4],
+            "recomputed_after_reopen": True,
+            "changed_source_rejected": True,
+            "explicit_reselect": True,
+        }
+        App.closeDocument(doc.Name)
+
     def finish():
         (output / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
         if report["status"] == "passed":
@@ -430,6 +520,7 @@ def run_macro():
             check_shortcuts({"PersonalCAD_PressPull": "Q"})
             check_planar_offset()
             check_cylindrical_holes()
+            check_q_references()
             report["status"] = "passed"
         except Exception:
             report["error"] = traceback.format_exc()
@@ -625,6 +716,7 @@ def run_macro():
             print("QA phase: Q planar STEP offset", file=sys.stderr, flush=True)
             check_planar_offset()
             check_cylindrical_holes()
+            check_q_references()
             if preview:
                 checks["L_R_C_open_and_cancel_native_picker"] = "skipped by --skip-outer"
             else:

@@ -235,16 +235,16 @@ protected:
                 }
                 return;
             }
-            if (elements.size() == 1 && elements.front().starts_with("Face")) {
-                constexpr auto command = "Part_SvenPlanarOffset";
-                if (!manager.getCommandByName(command)) {
-                    Command::addModule(Gui, "PartGui");
-                }
-                if (auto* offset = manager.getCommandByName(command)) {
-                    offset->invoke(0);
-                    return;
-                }
+            if (elements.size() == 1 && elements.front().starts_with("Face") && editFace(manager)) {
+                return;
             }
+        }
+        const auto references = getSelection().getSelectionT(nullptr, ResolveMode::NoResolve, true);
+        if (references.size() == 2
+            && std::ranges::any_of(references, [](const App::SubObjectT& reference) {
+                return isObjectType(reference.getSubObject(), "Part::SvenPlanarOffset");
+            }) && editFace(manager)) {
+            return;
         }
         getMainWindow()->showMessage(
             QCoreApplication::translate(
@@ -253,6 +253,20 @@ protected:
             ),
             5000
         );
+    }
+
+private:
+    static bool editFace(CommandManager& manager)
+    {
+        constexpr auto command = "Part_SvenPlanarOffset";
+        if (!manager.getCommandByName(command)) {
+            Command::addModule(Gui, "PartGui");
+        }
+        if (auto* offset = manager.getCommandByName(command)) {
+            offset->invoke(0);
+            return true;
+        }
+        return false;
     }
 };
 

@@ -245,7 +245,25 @@ protected:
     void activated(int) override
     {
         auto selection = Gui::Selection().getSelectionT(nullptr, Gui::ResolveMode::NoResolve, true);
-        auto* source = selection.size() == 1 ? selectedSource(selection.front()) : nullptr;
+        const App::SubObjectT* selectedFace = nullptr;
+        SvenPlanarOffset* existing = nullptr;
+        if (selection.size() <= 2) {
+            for (const auto& entry : selection) {
+                if (selectedSource(entry)) {
+                    selectedFace = &entry;
+                }
+                else if (!*entry.getElementName()) {
+                    existing = freecad_cast<SvenPlanarOffset*>(entry.getSubObject());
+                }
+            }
+        }
+        auto* source = selectedFace ? selectedSource(*selectedFace) : nullptr;
+        if (selection.size() == 2 && (!existing || existing->Support.getValue() != source)) {
+            Gui::getMainWindow()->showMessage(
+                tr("Select the Q edit and a replacement face on its original solid."), 5000
+            );
+            return;
+        }
         if (!source) {
             Gui::getMainWindow()->showMessage(tr("Select a planar face or cylindrical hole wall on a STEP solid."), 5000);
             return;
@@ -257,7 +275,8 @@ protected:
             Gui::getMainWindow()->showMessage(tr("Show the source solid before editing its face."), 5000);
             return;
         }
-        const auto& reference = selection.front();
+        const auto& reference = *selectedFace;
+        const App::DocumentObjectT edit(existing);
         auto face = reference.getNewElementName();
         if (face.empty()) {
             face = reference.getElementName();
@@ -272,7 +291,13 @@ protected:
             }
         }
         const bool resize = currentDiameter > 0;
-        const auto title = resize ? tr("Resize Cylindrical Hole") : tr("Offset Planar Face");
+        auto* existingResize = freecad_cast<SvenHoleResize*>(existing);
+        if (existing && resize != (existingResize != nullptr)) {
+            Gui::getMainWindow()->showMessage(tr("Select a replacement face of the same type."), 5000);
+            return;
+        }
+        const auto title = existing ? tr("Reselect Q Support")
+            : resize ? tr("Resize Cylindrical Hole") : tr("Offset Planar Face");
         QDialog dialog(Gui::getMainWindow());
         dialog.setObjectName(QStringLiteral("SvenPlanarOffsetDialog"));
         dialog.setWindowTitle(title);
@@ -287,6 +312,10 @@ protected:
         if (resize) {
             auto* existing = new QLabel(distance->text(), &dialog);
             layout->addRow(tr("Current diameter"), existing);
+        }
+        if (existing) {
+            distance->setValue(existingResize ? existingResize->Diameter.getValue()
+                                              : existing->Offset.getValue());
         }
         layout->addRow(resize ? tr("New diameter") : tr("Distance"), distance);
         auto* status = new QLabel(&dialog);
@@ -371,18 +400,20 @@ protected:
             return;
         }
         removePreview();
-        commit(reference, face, distance->value(), resize, title);
+        commit(reference, face, distance->value(), resize, title, edit, existing != nullptr);
     }
 
 private:
     void commit(const App::SubObjectT& reference, const std::string& face, double distance,
-                bool resize, const QString& title)
+                bool resize, const QString& title, const App::DocumentObjectT& edit, bool rebind)
     {
         auto* source = selectedSource(reference);
         auto* document = getActiveDocument();
         auto* gui = getActiveGuiDocument();
+        auto* existing = freecad_cast<SvenPlanarOffset*>(edit.getObject());
         if (!source || !gui || source->getDocument() != document || document->hasPendingTransaction()
-            || document->getBookedTransactionID() != App::NullTransaction) {
+            || document->getBookedTransactionID() != App::NullTransaction
+            || (rebind && (!existing || existing->Support.getValue() != source))) {
             Gui::getMainWindow()->showMessage(tr("The source or document changed before confirmation."), 5000);
             return;
         }
@@ -393,16 +424,18 @@ private:
         }
         App::AutoTransaction transaction(transactionId);
         try {
-            auto* result = resize
+            auto* result = existing ? existing : resize
                 ? static_cast<SvenPlanarOffset*>(document->addObject<SvenHoleResize>("HoleResize"))
                 : document->addObject<SvenPlanarOffset>("PlanarOffset");
             if (!result) {
                 throw Base::ValueError("The face edit could not be created.");
             }
-            if (auto* parent = App::GeoFeatureGroupExtension::getGroupOfObject(source)) {
-                static_cast<App::Part*>(parent)->addObject(result);
+            if (!existing) {
+                if (auto* parent = App::GeoFeatureGroupExtension::getGroupOfObject(source)) {
+                    static_cast<App::Part*>(parent)->addObject(result);
+                }
             }
-            result->Support.setValue(source, std::vector<std::string>{face});
+            result->setSupport(*source, face);
             if (resize) {
                 static_cast<SvenHoleResize*>(result)->Diameter.setValue(distance);
             }

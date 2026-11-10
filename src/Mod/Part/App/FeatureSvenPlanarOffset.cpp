@@ -5,6 +5,9 @@
 #include <algorithm>
 #include <cmath>
 #include <numbers>
+#include <sstream>
+
+#include <QCryptographicHash>
 
 #include <BRepAdaptor_Curve.hxx>
 #include <BRepAdaptor_Surface.hxx>
@@ -25,6 +28,7 @@
 #include <BRep_Tool.hxx>
 
 #include <App/GeoFeatureGroupExtension.h>
+#include <App/ElementMap.h>
 #include <App/Part.h>
 #include <Base/Exception.h>
 
@@ -134,6 +138,37 @@ TopoShape copySolidAndFace(const Feature& source, const char* name, TopoShape& f
     return copy;
 }
 
+std::string fingerprint(const Feature& source, TopoShape face)
+{
+    if (face.isNull() || face.getShape().ShapeType() != TopAbs_FACE) {
+        return {};
+    }
+    // Strip only the object's placement. Preserve the face's location within the solid.
+    auto location = source.Shape.getShape().getShape().Location().Inverted();
+    face.locate(location * face.getShape().Location());
+    std::ostringstream stream;
+    stream.imbue(std::locale::classic());
+    face.exportBrep(stream);
+    QCryptographicHash hash(QCryptographicHash::Sha256);
+    hash.addData(source.getNameInDocument());
+    hash.addData(QByteArray::fromStdString(stream.str()));
+    return hash.result().toHex().toStdString();
+}
+
+void nameEditedFace(TopoShape& shape, int index, const std::string& identity)
+{
+    if (!shape.hasElementMap()) {
+        shape.resetElementMap(std::make_shared<Data::ElementMap>());
+    }
+    const Data::IndexedName element("Face", index);
+    const auto aliases = shape.getElementMappedNames(element);
+    // Prefer the verified name for new links while keeping the kernel's history aliases.
+    shape.setElementName(element, Data::MappedName("QFace-" + identity), shape.Tag, nullptr, true);
+    for (const auto& [name, ids] : aliases) {
+        shape.setElementName(element, name, shape.Tag, &ids);
+    }
+}
+
 struct Bore
 {
     gp_Ax2 start;
@@ -207,12 +242,14 @@ bool hasPlanarBoreEnds(const TopoDS_Shape& solid, const TopoDS_Face& wall, const
     return atStart && atEnd;
 }
 
-bool hasResizedWall(const TopoDS_Shape& shape, const Bore& original, double radius)
+int findResizedWall(const TopoShape& result, const Bore& original, double radius)
 {
+    const auto& shape = result.getShape();
     const gp_Lin axis(original.start.Axis());
     const auto center = original.start.Location().Translated(
         gp_Vec(original.start.Direction()) * (original.depth / 2)
     );
+    int match = 0;
     for (TopExp_Explorer faces(shape, TopAbs_FACE); faces.More(); faces.Next()) {
         const auto& face = TopoDS::Face(faces.Current());
         const BRepAdaptor_Surface surface(face);
@@ -228,22 +265,26 @@ bool hasResizedWall(const TopoDS_Shape& shape, const Bore& original, double radi
                 <= holeTolerance * (radius + original.depth)
             && properties.CentreOfMass().Distance(center) <= holeTolerance) {
             const auto resized = describeBore(face);
-            return std::abs(resized.depth - original.depth) <= holeTolerance
-                && hasPlanarBoreEnds(shape, face, resized);
+            if (match || std::abs(resized.depth - original.depth) > holeTolerance
+                || !hasPlanarBoreEnds(shape, face, resized)) {
+                return 0;
+            }
+            match = result.findShape(face);
         }
     }
-    return false;
+    return match;
 }
 
-bool hasMovedFace(
-    const TopoDS_Shape& result,
+int findMovedFace(
+    const TopoShape& result,
     const gp_Pnt& expectedCenter,
     const gp_Dir& normal,
     double area,
     double tolerance
 )
 {
-    for (TopExp_Explorer faces(result, TopAbs_FACE); faces.More(); faces.Next()) {
+    int match = 0;
+    for (TopExp_Explorer faces(result.getShape(), TopAbs_FACE); faces.More(); faces.Next()) {
         const auto& face = TopoDS::Face(faces.Current());
         BRepAdaptor_Surface surface(face);
         if (surface.GetType() != GeomAbs_Plane) {
@@ -258,10 +299,13 @@ bool hasMovedFace(
         BRepGProp::SurfaceProperties(face, props);
         if (props.CentreOfMass().Distance(expectedCenter) <= tolerance
             && std::abs(props.Mass() - area) <= tolerance * std::sqrt(area)) {
-            return true;
+            if (match) {
+                return 0;
+            }
+            match = result.findShape(face);
         }
     }
-    return false;
+    return match;
 }
 
 }  // namespace
@@ -272,6 +316,8 @@ SvenPlanarOffset::SvenPlanarOffset()
 {
     ADD_PROPERTY_TYPE(Support, (nullptr), "Offset", App::Prop_None, "Source solid and selected face");
     ADD_PROPERTY_TYPE(Offset, (1.0), "Offset", App::Prop_None, "Signed distance from the source face");
+    ADD_PROPERTY_TYPE(SupportFingerprint, (""), "Offset", App::Prop_Hidden,
+                      "Identity of the selected source face");
     Placement.setStatus(App::Property::ReadOnly, true);
 }
 
@@ -289,7 +335,8 @@ bool SvenPlanarOffset::supports(const App::DocumentObject* source)
     return true;
 }
 
-TopoShape SvenPlanarOffset::calculate(const Feature& source, const char* faceName, double offset)
+TopoShape SvenPlanarOffset::calculate(const Feature& source, const char* faceName, double offset,
+                                     int* editedFace)
 {
     const double tolerance = 10 * Precision::Confusion();
     if (!std::isfinite(offset) || std::abs(offset) <= tolerance) {
@@ -330,18 +377,33 @@ TopoShape SvenPlanarOffset::calculate(const Feature& source, const char* faceNam
     }
     const double volumeChange = volume(resultShape) - sourceVolume;
     const double volumeTolerance = std::max(area * tolerance, std::abs(expectedVolumeChange) * 1e-7);
+    const int match = findMovedFace(result, faceProperties.CentreOfMass().Translated(displacement),
+                                   normal, area, tolerance);
     if (volumeChange * expectedVolumeChange <= 0
         || std::abs(volumeChange - expectedVolumeChange) > volumeTolerance
-        || !hasMovedFace(resultShape, faceProperties.CentreOfMass().Translated(displacement),
-                         normal, area, tolerance)) {
+        || !match) {
         throw Base::ValueError("The offset intersects other geometry or crosses the opposite wall.");
+    }
+    if (editedFace) {
+        *editedFace = match;
     }
     return result;
 }
 
 short SvenPlanarOffset::mustExecute() const
 {
-    return Support.isTouched() || Offset.isTouched() || Feature::mustExecute();
+    return Support.isTouched() || Offset.isTouched() || SupportFingerprint.isTouched()
+        || Feature::mustExecute();
+}
+
+void SvenPlanarOffset::setSupport(Feature& source, const std::string& faceName)
+{
+    const auto identity = fingerprint(source, source.Shape.getShape().getSubTopoShape(faceName.c_str(), true));
+    if (identity.empty()) {
+        throw Base::ValueError("The source face could not be resolved.");
+    }
+    Support.setValue(&source, std::vector<std::string>{faceName});
+    SupportFingerprint.setValue(identity);
 }
 
 App::DocumentObjectExecReturn* SvenPlanarOffset::execute()
@@ -355,7 +417,41 @@ App::DocumentObjectExecReturn* SvenPlanarOffset::execute()
     }
     try {
         auto* feature = static_cast<Feature*>(source);
-        auto result = buildResult(*feature, faces.front().c_str());
+        const auto& shape = feature->Shape.getShape();
+        auto faceName = faces.front();
+        auto identity = fingerprint(*feature, shape.getSubTopoShape(faceName.c_str(), true));
+        const std::string recorded = SupportFingerprint.getValue();
+        if (!recorded.empty() && identity != recorded) {
+            int match = 0;
+            const int count = shape.countSubShapes(TopAbs_FACE);
+            for (int index = 1; index <= count; ++index) {
+                if (fingerprint(*feature, shape.getSubTopoShape(TopAbs_FACE, index)) != recorded) {
+                    continue;
+                }
+                if (match) {
+                    return new App::DocumentObjectExecReturn(
+                        "The source face is ambiguous. Reselect it with Q."
+                    );
+                }
+                match = index;
+            }
+            if (!match) {
+                return new App::DocumentObjectExecReturn(
+                    "The source face changed or disappeared. Reselect it with Q."
+                );
+            }
+            faceName = "Face" + std::to_string(match);
+            identity = recorded;
+        }
+        int editedFace = 0;
+        auto result = buildResult(*feature, faceName.c_str(), editedFace);
+        nameEditedFace(result, editedFace, identity);
+        if (recorded.empty()) {
+            SupportFingerprint.setValue(identity);
+        }
+        if (faceName != faces.front()) {
+            Support.setValue(feature, std::vector<std::string>{faceName});
+        }
         Placement.setValueIfChanged(feature->Placement.getValue());
         copyMaterial(feature);
         Shape.setValue(result);
@@ -371,9 +467,9 @@ App::DocumentObjectExecReturn* SvenPlanarOffset::execute()
     }
 }
 
-TopoShape SvenPlanarOffset::buildResult(const Feature& source, const char* faceName) const
+TopoShape SvenPlanarOffset::buildResult(const Feature& source, const char* faceName, int& editedFace) const
 {
-    return calculate(source, faceName, Offset.getValue());
+    return calculate(source, faceName, Offset.getValue(), &editedFace);
 }
 
 PROPERTY_SOURCE(Part::SvenHoleResize, Part::SvenPlanarOffset)
@@ -384,7 +480,8 @@ SvenHoleResize::SvenHoleResize()
     Offset.setStatus(App::Property::Hidden, true);
 }
 
-TopoShape SvenHoleResize::calculate(const Feature& source, const char* faceName, double diameter)
+TopoShape SvenHoleResize::calculate(const Feature& source, const char* faceName, double diameter,
+                                   int* editedFace)
 {
     if (!std::isfinite(diameter) || diameter <= 2 * holeTolerance) {
         throw Base::ValueError("Enter a positive hole diameter.");
@@ -417,9 +514,15 @@ TopoShape SvenHoleResize::calculate(const Feature& source, const char* faceName,
     const double tolerance = std::max(std::abs(expected) * 1e-7,
                                       2 * std::numbers::pi * bore.radius * bore.depth * holeTolerance);
     if (!isSingleSolid(shape) || !BRepCheck_Analyzer(shape).IsValid()
-        || std::abs(volume(shape) - volume(base) - expected) > tolerance
-        || !hasResizedWall(shape, bore, radius)) {
+        || std::abs(volume(shape) - volume(base) - expected) > tolerance) {
         throw Base::ValueError("The new diameter would alter nearby geometry or open the side wall.");
+    }
+    const int match = findResizedWall(result, bore, radius);
+    if (!match) {
+        throw Base::ValueError("The new diameter would alter nearby geometry or open the side wall.");
+    }
+    if (editedFace) {
+        *editedFace = match;
     }
     return result;
 }
@@ -429,7 +532,7 @@ short SvenHoleResize::mustExecute() const
     return Diameter.isTouched() || SvenPlanarOffset::mustExecute();
 }
 
-TopoShape SvenHoleResize::buildResult(const Feature& source, const char* faceName) const
+TopoShape SvenHoleResize::buildResult(const Feature& source, const char* faceName, int& editedFace) const
 {
-    return calculate(source, faceName, Diameter.getValue());
+    return calculate(source, faceName, Diameter.getValue(), &editedFace);
 }

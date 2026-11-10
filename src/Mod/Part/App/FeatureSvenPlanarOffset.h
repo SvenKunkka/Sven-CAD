@@ -3,6 +3,7 @@
 #pragma once
 
 #include <App/PropertyUnits.h>
+#include <App/PropertyStandard.h>
 
 #include "PartFeature.h"
 
@@ -18,15 +19,18 @@ public:
 
     App::PropertyLinkSub Support;
     App::PropertyDistance Offset;
+    App::PropertyString SupportFingerprint;
 
     static bool supports(const App::DocumentObject* source);
-    static TopoShape calculate(const Feature& source, const char* faceName, double offset);
+    static TopoShape calculate(const Feature& source, const char* faceName, double offset,
+                               int* editedFace = nullptr);
+    void setSupport(Feature& source, const std::string& faceName);
 
     short mustExecute() const override;
     App::DocumentObjectExecReturn* execute() override;
 
 protected:
-    virtual TopoShape buildResult(const Feature& source, const char* faceName) const;
+    virtual TopoShape buildResult(const Feature& source, const char* faceName, int& editedFace) const;
 };
 
 class PartExport SvenHoleResize: public SvenPlanarOffset
@@ -38,11 +42,12 @@ public:
 
     App::PropertyLength Diameter;
 
-    static TopoShape calculate(const Feature& source, const char* faceName, double diameter);
+    static TopoShape calculate(const Feature& source, const char* faceName, double diameter,
+                               int* editedFace = nullptr);
     short mustExecute() const override;
 
 protected:
-    TopoShape buildResult(const Feature& source, const char* faceName) const override;
+    TopoShape buildResult(const Feature& source, const char* faceName, int& editedFace) const override;
 };
 
 }  // namespace Part

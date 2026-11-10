@@ -22,6 +22,13 @@ def verify_start_branding(expected, output):
     window = Gui.getMainWindow()
     start = next(widget for widget in window.findChildren(QtWidgets.QWidget)
                  if widget.metaObject().className().endswith("StartView") and widget.isVisible())
+    pages = start.findChild(QtWidgets.QStackedWidget)
+    pages.setCurrentIndex(0)
+    themes = start.findChild(QtWidgets.QWidget, "ThemeSelectorWidget")
+    theme_names = [button.text() for button in themes.findChildren(QtWidgets.QToolButton)
+                   if button.isVisible()]
+    assert theme_names and all(expected in name for name in theme_names), theme_names
+    pages.setCurrentIndex(1)
     labels = [label.text() for label in start.findChildren(QtWidgets.QLabel) if label.isVisible()]
     description, = [text for text in labels if expected in text and "文件" in text]
     assert not any("FreeCAD" in text for text in labels), labels
@@ -48,7 +55,8 @@ def verify_start_branding(expected, output):
     QtCore.QTimer.singleShot(100, inspect_about)
     Gui.runCommand("Std_About")
     assert "title" in observed, observed
-    return {"start_description": description, "about_title": observed["title"]}
+    return {"start_description": description, "theme_names": theme_names,
+            "about_title": observed["title"]}
 
 def verify_profile():
     marker = Path(os.environ["PERSONALCAD_PROFILE_EVIDENCE"])

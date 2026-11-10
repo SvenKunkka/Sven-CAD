@@ -1,0 +1,74 @@
+{
+  "catalog": "Sven CAD common fasteners",
+  "catalog_version": "2026.11-1",
+  "units": "mm",
+  "geometry": "Simplified nominal solids with schematic threads. Dimensions use the nominal or maximum value listed by the source; tolerances are not modeled.",
+  "part_number_scheme": "<standard code>-<size>[x<length>]. Company part numbers are not yet assigned and stay empty until supplied.",
+  "sources": {
+    "fasteners-eu-iso-4762": {
+      "title": "ISO 4762 - Hexagon socket Head Cap Screws, table according to ISO 4762",
+      "publisher": "EU Fasteners Portal (fasteners.eu)",
+      "url": "https://www.fasteners.eu/standards/ISO/4762/",
+      "retrieved": "2026-11-10",
+      "values": "dk max, k max, s nominal, t min, P"
+    },
+    "fasteners-eu-iso-4032": {
+      "title": "ISO 4032 - Hexagon Nuts, table according to EN ISO 4032",
+      "publisher": "EU Fasteners Portal (fasteners.eu)",
+      "url": "https://www.fasteners.eu/standards/ISO/4032/",
+      "retrieved": "2026-11-10",
+      "values": "s nominal = max, m max, P"
+    },
+    "fasteners-eu-iso-7089": {
+      "title": "ISO 7089 - Plain washers Form A (page table labelled DIN 125)",
+      "publisher": "EU Fasteners Portal (fasteners.eu)",
+      "url": "https://www.fasteners.eu/standards/ISO/7089/",
+      "retrieved": "2026-11-10",
+      "values": "d1 min, d2 max, h mean of min and max"
+    }
+  },
+  "families": [
+    {
+      "kind": "screw",
+      "code": "ISO4762",
+      "standard": "ISO 4762",
+      "edition": "As tabulated by the source on the retrieval date; the page does not state the edition year.",
+      "name": {"en": "Hexagon socket head cap screw", "zh": "内六角圆柱头螺钉"},
+      "source": "fasteners-eu-iso-4762",
+      "sizes": [
+        {"size": "M2", "d": 2.0, "pitch": 0.4, "dk": 3.8, "k": 2.0, "s": 1.5, "t": 1.0, "lengths": [4, 5, 6, 8, 10]},
+        {"size": "M2.5", "d": 2.5, "pitch": 0.45, "dk": 4.5, "k": 2.5, "s": 2.0, "t": 1.1, "lengths": [4, 5, 6, 8, 10, 12]},
+        {"size": "M3", "d": 3.0, "pitch": 0.5, "dk": 5.5, "k": 3.0, "s": 2.5, "t": 1.3, "lengths": [4, 5, 6, 8, 10, 12, 16]},
+        {"size": "M4", "d": 4.0, "pitch": 0.7, "dk": 7.0, "k": 4.0, "s": 3.0, "t": 2.0, "lengths": [6, 8, 10, 12, 16, 20]}
+      ]
+    },
+    {
+      "kind": "nut",
+      "code": "ISO4032",
+      "standard": "ISO 4032",
+      "edition": "As tabulated by the source on the retrieval date (EN ISO 4032); the page does not state the edition year.",
+      "name": {"en": "Hexagon nut", "zh": "六角螺母"},
+      "source": "fasteners-eu-iso-4032",
+      "sizes": [
+        {"size": "M2", "d": 2.0, "pitch": 0.4, "s": 4.0, "m": 1.6},
+        {"size": "M2.5", "d": 2.5, "pitch": 0.45, "s": 5.0, "m": 2.0},
+        {"size": "M3", "d": 3.0, "pitch": 0.5, "s": 5.5, "m": 2.4},
+        {"size": "M4", "d": 4.0, "pitch": 0.7, "s": 7.0, "m": 3.2}
+      ]
+    },
+    {
+      "kind": "washer",
+      "code": "ISO7089",
+      "standard": "ISO 7089",
+      "edition": "As tabulated by the source on the retrieval date; the source table is labelled DIN 125.",
+      "name": {"en": "Plain washer, normal series", "zh": "平垫圈"},
+      "source": "fasteners-eu-iso-7089",
+      "sizes": [
+        {"size": "M2", "d": 2.0, "d1": 2.2, "d2": 5.0, "h": 0.3},
+        {"size": "M2.5", "d": 2.5, "d1": 2.7, "d2": 6.0, "h": 0.5},
+        {"size": "M3", "d": 3.0, "d1": 3.2, "d2": 7.0, "h": 0.5},
+        {"size": "M4", "d": 4.0, "d1": 4.3, "d2": 9.0, "h": 0.8}
+      ]
+    }
+  ]
+}

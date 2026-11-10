@@ -370,8 +370,17 @@ def run_macro():
         stage("sample_export", lambda: __import__("SvenDrawingGui").export_drawing(sample_page,
                                                                                     str(output / "m2-sample.pdf")))
 
+        def busy_views():
+            return sorted(v.Name for v in doc.Objects
+                          if v.isDerivedFrom("TechDraw::DrawViewPart") and v.waitingForResult())
+        checks["touched_after_sample_export"] = sorted(o.Name for o in doc.Objects if "Touched" in o.State)[:20]
+        checks["busy_views_after_sample_export"] = busy_views()
+        # Exporting must not start another hidden line removal in the background.
+        require(not checks["busy_views_after_sample_export"], ("views recomputing after export",
+                                                                checks["busy_views_after_sample_export"]))
         path = output / "m2-assembly.FCStd"
         stage("save", lambda: doc.saveAs(str(path)))
+        checks["busy_views_before_close"] = busy_views()
         report["fcstd_bytes"] = path.stat().st_size
         name = doc.Name
         stage("close", lambda: App.closeDocument(name))

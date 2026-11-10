@@ -462,7 +462,15 @@ void PagePrinter::postRenderCleanUp(QGSPage* ourScene,
         return;
     }
     ourScene->setExportingPdf(false);
+#ifdef FREECAD_PERSONAL_CAD
+    // Printing changes only how the scene is drawn, not the views' geometry. Recomputing every
+    // view here started a new hidden line removal after each export, which on a page of modeled
+    // threads ran for minutes in the background and held up closing the document.
+    Q_UNUSED(dPage);
+    ourScene->redrawAllViews();
+#else
     dPage->redrawCommand();
+#endif
     ourTemplate->updateView(true);
 }
 

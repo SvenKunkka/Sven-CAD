@@ -318,7 +318,7 @@ class ReplaceFastenerCommand:
         if not links or other or any(link.Document != doc for link in links):
             _warn(title, tr("Select fastener instances to replace."))
             return
-        kinds = {link.getLinkedObject(False).FastenerKind for link in links}
+        kinds = {SvenFasteners.source_of(link).FastenerKind for link in links}
         form = FastenerDialog("replace", kind=kinds.pop() if len(kinds) == 1 else None, count=len(links))
         if not form.exec() or App.ActiveDocument != doc:
             return

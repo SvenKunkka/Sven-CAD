@@ -96,9 +96,17 @@ def _token_matches(token, item):
         if token == standard_number:
             return True
         return bool(item["length"]) and math.isclose(item["length"], float(length.group(1)))
-    if token in item["part_number"].lower():
+    # Thread sizes are exact, so M2 does not also find M2.5 and M2x1 does not find M2x10.
+    if re.fullmatch(r"m\d+(?:\.\d+)?", token):
+        return token == item["size"].lower()
+    sized = re.fullmatch(r"(?:iso(\d+)-)?(m\d+(?:\.\d+)?)[x×*](\d+(?:\.\d+)?)", token)
+    if sized:
+        return bool(sized.group(1) in (None, standard_number) and item["size"].lower() == sized.group(2)
+                    and item["length"]
+                    and math.isclose(item["length"], float(sized.group(3))))
+    if token == item["part_number"].lower():
         return True
-    if token == item["size"].lower():
+    if token in item["part_number"].lower() and not re.search(r"m\d", token):
         return True
     kind = [k for k, words in KIND_WORDS.items() if token in words]
     if kind:
@@ -108,10 +116,6 @@ def _token_matches(token, item):
         return True
     if token in item["name"]["en"].lower() or token in item["name"]["zh"]:
         return True
-    sized = re.fullmatch(r"(m\d+(?:\.\d+)?)[x×*](\d+(?:\.\d+)?)", token)
-    if sized:
-        return (item["size"].lower() == sized.group(1) and item["length"]
-                and math.isclose(item["length"], float(sized.group(2))))
     return False
 
 
@@ -211,8 +215,13 @@ def ensure_source(doc, item):
     return source, True
 
 
+def source_of(link):
+    """The linked source. Link arrays resolve getLinkedObject() to themselves, so read the property."""
+    return getattr(link, "LinkedObject", None)
+
+
 def is_instance(obj):
-    return obj is not None and obj.TypeId == "App::Link" and is_source(obj.getLinkedObject(False))
+    return obj is not None and obj.TypeId == "App::Link" and is_source(source_of(obj))
 
 
 def instances(doc):
@@ -257,7 +266,7 @@ def replace(links, item):
         raise FastenerError("Select fastener instances from one document.")
     source, created = ensure_source(doc, item)
     for link in links:
-        if link.getLinkedObject(False) != source:
+        if source_of(link) != source:
             link.setLink(source)
             link.Label = _next_label(doc, item["part_number"])
     return source, created
@@ -267,7 +276,7 @@ def summary(doc):
     """Count fastener instances per part number, including link arrays."""
     rows = {}
     for link in instances(doc):
-        source = link.getLinkedObject(False)
+        source = source_of(link)
         count = link.ElementCount if getattr(link, "ElementCount", 0) else 1
         row = rows.setdefault(source.PartNumber, {
             "part_number": source.PartNumber, "company_part_number": source.CompanyPartNumber,

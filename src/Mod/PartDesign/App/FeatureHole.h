@@ -57,6 +57,9 @@ public:
     App::PropertyEnumeration ThreadType;
     App::PropertyEnumeration ThreadSize;
     App::PropertyEnumeration ThreadClass;
+#ifdef FREECAD_PERSONAL_CAD
+    App::PropertyString ManufacturingLimits;
+#endif
     App::PropertyEnumeration ThreadFit;
     App::PropertyLength Diameter;
     App::PropertyLength ThreadDiameter;

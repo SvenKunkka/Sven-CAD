@@ -29,6 +29,7 @@
 
 
 class Ui_TaskHoleParameters;
+class QLabel;
 
 namespace App
 {
@@ -156,6 +157,10 @@ private:
     void updateHoleTypeCombo();
     void updateStartUI();
     void updateStartReferenceName();
+#ifdef FREECAD_PERSONAL_CAD
+    void updateManufacturingReference(const PartDesign::Hole& hole);
+    QLabel* manufacturingReference = nullptr;
+#endif
     void selectedStartReference(const Gui::SelectionChanges& msg);
     QString getStartReference() const;
 

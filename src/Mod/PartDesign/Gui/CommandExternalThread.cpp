@@ -30,6 +30,7 @@
 #include <Gui/Selection/Selection.h>
 #include <Mod/Part/Gui/ViewProviderExt.h>
 #include <Mod/PartDesign/App/FeatureExternalThread.h>
+#include <Mod/PartDesign/App/SvenMetricThreadLimits.h>
 
 namespace
 {
@@ -146,6 +147,32 @@ private:
         size->setCurrentIndex(shaft.size);
         form->addRow(threadText("Size"), size);
 
+        auto* manufacturingClass = new QComboBox(&dialog);
+        manufacturingClass->setObjectName(QStringLiteral("ExternalThreadManufacturingClass"));
+        manufacturingClass->addItem(threadText("Unspecified"));
+        manufacturingClass->addItem(QStringLiteral("6g"));
+        form->addRow(threadText("Manufacturing class"), manufacturingClass);
+        auto* manufacturingLimits = new QLabel(&dialog);
+        manufacturingLimits->setObjectName(QStringLiteral("ExternalThreadManufacturingLimits"));
+        manufacturingLimits->setWordWrap(true);
+        form->addRow(manufacturingLimits);
+        const auto updateLimits = [=] {
+            const auto* limits = PartDesign::MetricCoarseThreadLimits::find(
+                size->currentText().toStdString()
+            );
+            const bool show = manufacturingClass->currentIndex() == 1 && limits;
+            manufacturingLimits->setVisible(show);
+            if (show) {
+                manufacturingLimits->setText(
+                    QString::fromStdString(limits->externalReference()) + QStringLiteral("\n")
+                    + threadText("The model uses nominal dimensions.")
+                );
+            }
+        };
+        QObject::connect(size, qOverload<int>(&QComboBox::currentIndexChanged), &dialog, updateLimits);
+        QObject::connect(manufacturingClass, qOverload<int>(&QComboBox::currentIndexChanged), &dialog, updateLimits);
+        updateLimits();
+
         auto* length = new Gui::QuantitySpinBox(&dialog);
         length->setObjectName(QStringLiteral("ExternalThreadLength"));
         length->setUnit(Base::Unit::Length);
@@ -221,6 +248,7 @@ private:
             result->ThreadLength.setValue(threadLength);
             result->LeftHanded.setValue(leftHand);
             result->Modeled.setValue(modelThread);
+            result->ManufacturingClass.setValue(static_cast<long>(manufacturingClass->currentIndex()));
             result->setThreadResult(*current.source, resultShape);
             result->purgeTouched();
 

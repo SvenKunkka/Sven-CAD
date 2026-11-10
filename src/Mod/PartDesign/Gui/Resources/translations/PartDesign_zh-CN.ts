@@ -2178,6 +2178,12 @@ If zero, it is equal to Radius2</source>
   <context>
     <name>PartDesignGui::TaskHoleParameters</name>
     <message>
+      <source>Manufacturing reference
+%1</source>
+      <translation>加工尺寸参考
+%1</translation>
+    </message>
+    <message>
       <location filename="../../TaskHoleParameters.cpp" line="59"/>
       <source>Counterbore</source>
       <translation>沉孔</translation>
@@ -4912,6 +4918,18 @@ over 90: larger hole radius at the bottom</source>
   </context>
   <context>
     <name>CmdPartDesignExternalThread</name>
+    <message>
+      <source>Manufacturing class</source>
+      <translation>加工公差等级</translation>
+    </message>
+    <message>
+      <source>Unspecified</source>
+      <translation>未指定</translation>
+    </message>
+    <message>
+      <source>The model uses nominal dimensions.</source>
+      <translation>模型采用公称尺寸。</translation>
+    </message>
     <message>
       <source>External Thread</source>
       <translation>外螺纹</translation>

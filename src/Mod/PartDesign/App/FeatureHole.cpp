@@ -64,6 +64,9 @@
 #include <Mod/Part/App/Tools.h>
 
 #include "FeatureHole.h"
+#ifdef FREECAD_PERSONAL_CAD
+#include "SvenMetricThreadLimits.h"
+#endif
 #include "nlohmann/json.hpp"
 
 #include <numbers>
@@ -561,6 +564,11 @@ Hole::Hole()
     ADD_PROPERTY_TYPE(ModelThread, (false), "Hole", App::Prop_None, "Model actual thread");
 
     ADD_PROPERTY_TYPE(CosmeticThread, (true), "Hole", App::Prop_None, "Texture the thread");
+#ifdef FREECAD_PERSONAL_CAD
+    ADD_PROPERTY_TYPE(ManufacturingLimits, (""), "Manufacturing",
+                      static_cast<App::PropertyType>(App::Prop_ReadOnly | App::Prop_Output),
+                      "Reference diameter limits and normal engagement length");
+#endif
 
     ADD_PROPERTY_TYPE(ThreadType, (0L), "Hole", App::Prop_None, "Thread type");
     ThreadType.setEnums(ThreadTypeEnums);
@@ -1641,6 +1649,18 @@ void Hole::onChanged(const App::Property* prop)
         updateDiameterParam();
     }
 
+#ifdef FREECAD_PERSONAL_CAD
+    if (prop == &ThreadType || prop == &ThreadSize || prop == &ThreadClass || prop == &Threaded) {
+        const auto* limits = Threaded.getValue() && ThreadType.isValid() && ThreadSize.isValid()
+            && ThreadClass.isValid() && std::string_view(ThreadType.getValueAsString()) == "ISOMetricProfile"
+            && std::string_view(ThreadClass.getValueAsString()) == "6H"
+            ? MetricCoarseThreadLimits::find(ThreadSize.getValueAsString()) : nullptr;
+        const auto value = limits ? limits->internalReference() : std::string();
+        if (ManufacturingLimits.getStrValue() != value) {
+            ManufacturingLimits.setValue(value);
+        }
+    }
+#endif
     ProfileBased::onChanged(prop);
 }
 void Hole::setupObject()

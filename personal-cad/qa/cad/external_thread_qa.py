@@ -1,4 +1,4 @@
-"""Verify nominal external threads through native features and the Sven CAD ribbon."""
+"""Verify Sven CAD internal and external threads and their manufacturing references."""
 
 import argparse
 import hashlib
@@ -15,6 +15,18 @@ import traceback
 OUTPUT_ENV = "PERSONAL_CAD_EXTERNAL_THREAD_QA"
 SIZES = (("M2x0.4", 2.0, 0.4), ("M2.5x0.45", 2.5, 0.45),
          ("M3x0.5", 3.0, 0.5), ("M4x0.7", 4.0, 0.7))
+EXTERNAL_RANGES = {
+    "M2x0.4": ("1.886–1.981", "1.654–1.721", "0.050", "1.0–3.0"),
+    "M2.5x0.45": ("2.380–2.480", "2.117–2.188", "0.056", "1.3–3.8"),
+    "M3x0.5": ("2.874–2.980", "2.580–2.655", "0.063", "1.5–4.5"),
+    "M4x0.7": ("3.838–3.978", "3.433–3.523", "0.088", "2.0–6.0"),
+}
+INTERNAL_RANGES = {
+    "M2x0.4": (1.60, "1.567–1.679", "1.740–1.830"),
+    "M2.5x0.45": (2.05, "2.013–2.138", "2.208–2.303"),
+    "M3x0.5": (2.50, "2.459–2.599", "2.675–2.775"),
+    "M4x0.7": (3.30, "3.242–3.422", "3.545–3.663"),
+}
 
 
 def run_macro():
@@ -49,8 +61,10 @@ def run_macro():
         doc.recompute()
         return feature
 
-    def phase(shape, radius, z, pitch, azimuth):
+    def phase(shape, radius, z, pitch, azimuth, center=None):
         xy = App.Vector(radius * math.cos(azimuth), radius * math.sin(azimuth), 0)
+        if center is not None:
+            xy += center
         sample_count = 96
         angles = []
         for index in range(sample_count):
@@ -80,6 +94,15 @@ def run_macro():
                 assert result.ThreadSize == spec and abs(result.Pitch.Value - pitch) < 1e-10
                 assert abs(result.MajorDiameter.Value - diameter) < 1e-10
                 assert abs(result.MinorDiameter.Value - minor) < 1e-10
+                assert result.ManufacturingClass == "Unspecified" and not result.ManufacturingLimits
+                nominal_brep = shape.exportBrepToString()
+                result.ManufacturingClass = "6g"
+                d, d2, root, engagement = EXTERNAL_RANGES[spec]
+                assert result.ManufacturingLimits == (
+                    f"6g | d {d} mm | d2 {d2} mm | r ≥ {root} mm | L {engagement} mm"
+                )
+                doc.recompute()
+                assert result.Shape.exportBrepToString() == nominal_brep
                 assert abs(result.ThreadLength.Value - length) < 1e-10
                 assert abs(shape.BoundBox.ZLength - source.Shape.BoundBox.ZLength) < 2e-5
                 assert shape.isInside(App.Vector(radius - pitch / 16.0, 0, length + pitch), 1e-7, True)
@@ -95,6 +118,7 @@ def run_macro():
                 assert source.Shape.exportBrepToString() == original
                 cases.append({"spec": spec, "left_handed": left, "phase_advance_turns": advance,
                               "pitch_mm": result.Pitch.Value, "minor_diameter_mm": minor,
+                              "manufacturing_limits": result.ManufacturingLimits,
                               "removed_volume_mm3": source.Shape.Volume - shape.Volume})
                 App.closeDocument(doc.Name)
         checks["four_sizes_and_both_hands"] = cases
@@ -164,6 +188,10 @@ def run_macro():
             if not accept:
                 modal.reject()
                 return
+            manufacturing = modal.findChild(QtWidgets.QComboBox, "ExternalThreadManufacturingClass")
+            manufacturing.setCurrentIndex(manufacturing.findText("6g"))
+            reference = modal.findChild(QtWidgets.QLabel, "ExternalThreadManufacturingLimits")
+            assert reference.isVisible() and "2.874–2.980 mm" in reference.text()
             length = modal.findChild(QtWidgets.QAbstractSpinBox, "ExternalThreadLength")
             assert length.setProperty("rawValue", 1.75)
             modal.findChild(QtWidgets.QComboBox, "ExternalThreadHand").setCurrentIndex(1)
@@ -181,6 +209,8 @@ def run_macro():
         assert thread.Placement.isSame(source.Placement, 1e-7)
         assert thread.getGlobalPlacement().isSame(source.getGlobalPlacement(), 1e-7)
         assert thread.LeftHanded and thread.Modeled and abs(thread.ThreadLength.Value - 1.75) < 1e-8
+        assert thread.ManufacturingClass == "6g" and "2.874–2.980 mm" in thread.ManufacturingLimits
+        assert math.isclose(thread.MajorDiameter.Value, 3.0, abs_tol=1e-9)
         assert thread.Shape.isValid() and 0 < thread.Shape.Volume < source.Shape.Volume
         assert source.Shape.exportBrepToString() == before[4] and not source.ViewObject.Visibility
         assert doc.UndoCount == before[1] + 1
@@ -190,6 +220,7 @@ def run_macro():
         doc.redo()
         thread = doc.getObject(name)
         assert thread and thread.Shape.isValid() and not source.ViewObject.Visibility
+        assert thread.ManufacturingClass == "6g" and "2.874–2.980 mm" in thread.ManufacturingLimits
         assert abs(thread.Shape.Volume - original_volume) < 1e-7
 
         path = output / "metric-thread.FCStd"
@@ -200,6 +231,7 @@ def run_macro():
         source = doc.getObject(source_name)
         thread = doc.getObject(name)
         assert thread.Support[0] == source and thread.LeftHanded and thread.Modeled
+        assert thread.ManufacturingClass == "6g" and "2.874–2.980 mm" in thread.ManufacturingLimits
         assert abs(thread.Shape.Volume - original_volume) < 1e-7
         thread.ThreadLength = 1.25
         doc.recompute()
@@ -210,6 +242,135 @@ def run_macro():
         assert len(thread.Shape.Faces) == len(source.Shape.Faces)
         assert thread.ThreadSize == "M3x0.5" and abs(thread.Pitch.Value - 0.5) < 1e-10
         checks["ribbon_cancel_nested_STEP_undo_redo_reopen_and_schematic"] = True
+        App.closeDocument(doc.Name)
+
+    def make_hole_profile(doc):
+        body = doc.addObject("PartDesign::Body", "Body")
+        box = body.newObject("PartDesign::AdditiveBox", "Stock")
+        box.Length = box.Width = 10
+        box.Height = 6
+        sketch = body.newObject("Sketcher::SketchObject", "Profile")
+        sketch.Placement = App.Placement(App.Vector(0, 0, 6), App.Rotation())
+        sketch.addGeometry(Part.Circle(App.Vector(5, 5, 0), App.Vector(0, 0, 1), 1), False)
+        doc.recompute()
+        return body, sketch
+
+    def check_internal_geometry():
+        cases = []
+        center = App.Vector(5, 5, 0)
+        for spec, diameter, pitch in SIZES:
+            drill, d1, d2 = INTERNAL_RANGES[spec]
+            engagement = EXTERNAL_RANGES[spec][-1]
+            for through, handedness in ((False, "Right"), (True, "Left")):
+                doc = App.newDocument("InternalThreadQA")
+                body, sketch = make_hole_profile(doc)
+                hole = body.newObject("PartDesign::Hole", "Hole")
+                hole.Profile = sketch
+                hole.BaseProfileType = 2  # Circles
+                hole.DepthType = "ThroughAll" if through else "Dimension"
+                hole.Depth = 6 if through else 5
+                hole.DrillPoint = "Flat"
+                hole.ThreadType = "ISOMetricProfile"
+                hole.ThreadSize = spec
+                hole.ThreadClass = "6H"
+                hole.ThreadDirection = handedness
+                hole.Threaded = True
+                hole.CosmeticThread = True
+                hole.ThreadDepthType = "Hole Depth" if through else "Dimension"
+                if not through:
+                    hole.ThreadDepth = 4 * pitch
+                doc.recompute()
+                reference = f"6H | D1 {d1} mm | D2 {d2} mm | L {engagement} mm"
+                assert hole.ManufacturingLimits == reference
+                assert math.isclose(hole.ThreadPitch.Value, pitch, abs_tol=1e-9)
+                assert math.isclose(hole.Diameter.Value, drill, abs_tol=1e-9)
+                assert math.isclose(hole.ThreadDiameter.Value, diameter, abs_tol=1e-9)
+                basic = hole.Shape
+                assert hole.isValid() and basic.isValid() and len(basic.Solids) == 1
+                assert math.isclose(basic.Volume, 600 - math.pi * (drill / 2)**2 * (6 if through else 5),
+                                    abs_tol=1e-5)
+                hole.ModelThread = True
+                hole.CosmeticThread = False
+                doc.recompute()
+                shape = hole.Shape
+                assert hole.isValid() and shape.isValid() and len(shape.Solids) == 1
+                assert 0 < shape.Volume < basic.Volume and len(shape.Faces) > len(basic.Faces)
+                assert shape.isInside(center + App.Vector(0, 0, 0.5), 1e-7, True) != through
+                radius = (drill + diameter) / 4
+                z = 6 - 2 * pitch
+                first = phase(shape, radius, z, pitch, 0, center)
+                quarter = phase(shape, radius, z, pitch, math.pi / 2, center)
+                repeat = phase(shape, radius, z - pitch, pitch, 0, center)
+                advance = math.remainder(quarter - first, 1)
+                assert abs(advance - (0.25 if handedness == "Right" else -0.25)) < 0.04, (spec, advance)
+                assert abs(math.remainder(repeat - first, 1)) < 0.04
+                if not through:
+                    assert math.isclose(hole.ThreadDepth.Value, 4 * pitch, abs_tol=1e-9)
+                    assert shape.isInside(center + App.Vector(radius, 0, 1.25), 1e-7, True)
+                if spec == "M3x0.5":
+                    path = output / ("internal-through.FCStd" if through else "internal-blind.FCStd")
+                    doc.saveAs(str(path))
+                    App.closeDocument(doc.Name)
+                    doc = App.openDocument(str(path))
+                    hole = doc.Hole
+                    assert hole.ThreadClass == "6H" and hole.ManufacturingLimits == reference
+                    assert hole.ThreadDirection == handedness and hole.Shape.isValid()
+                    assert math.isclose(hole.Shape.Volume, shape.Volume, abs_tol=1e-6)
+                    hole.ModelThread = False
+                    hole.CosmeticThread = True
+                    doc.recompute()
+                    assert math.isclose(hole.Shape.Volume, basic.Volume, abs_tol=1e-6)
+                cases.append({"spec": spec, "through": through, "hand": handedness,
+                              "pitch_mm": pitch, "tap_drill_mm": drill,
+                              "phase_advance_turns": advance, "manufacturing_limits": reference})
+                App.closeDocument(doc.Name)
+        checks["internal_blind_through_geometry_and_reopen"] = cases
+
+    def check_internal_task():
+        doc = App.newDocument("HoleManufacturingTaskQA")
+        doc.UndoMode = 1
+        body, sketch = make_hole_profile(doc)
+        view = Gui.activeDocument().activeView()
+        view.setActiveObject("pdbody", body)
+        view.fitAll()
+        existing = {obj.Name for obj in doc.Objects}
+
+        def open_hole():
+            select(doc, sketch, "")
+            Gui.runCommand("PartDesign_Hole")
+            QtTest.QTest.qWait(220)
+            assert Gui.Control.activeDialog()
+            type_box = window.findChild(QtWidgets.QComboBox, "ThreadType")
+            type_box.setCurrentIndex(1)
+            size_box = window.findChild(QtWidgets.QComboBox, "ThreadSize")
+            size_box.setCurrentIndex(size_box.findText("M3x0.5"))
+            window.findChild(QtWidgets.QComboBox, "HoleType").setCurrentIndex(2)
+            class_box = window.findChild(QtWidgets.QComboBox, "ThreadClass")
+            reference = window.findChild(QtWidgets.QLabel, "HoleManufacturingReference")
+            class_box.setCurrentIndex(class_box.findText("6H"))
+            QtTest.QTest.qWait(100)
+            assert reference.isVisible() and "D1 2.459–2.599 mm" in reference.text()
+            class_box.setCurrentIndex(class_box.findText("5H"))
+            QtTest.QTest.qWait(100)
+            assert not reference.isVisible()
+            class_box.setCurrentIndex(class_box.findText("6H"))
+
+        open_hole()
+        Gui.Control.activeTaskDialog().reject()
+        QtTest.QTest.qWait(200)
+        assert {obj.Name for obj in doc.Objects} == existing
+        open_hole()
+        Gui.Control.activeTaskDialog().accept()
+        QtTest.QTest.qWait(200)
+        hole, = [obj for obj in doc.Objects if obj.TypeId == "PartDesign::Hole"]
+        assert hole.isValid() and hole.Shape.isValid() and hole.ThreadClass == "6H"
+        assert "D2 2.675–2.775 mm" in hole.ManufacturingLimits
+        name = hole.Name
+        doc.undo()
+        assert doc.getObject(name) is None
+        doc.redo()
+        assert "D2 2.675–2.775 mm" in doc.getObject(name).ManufacturingLimits
+        checks["native_hole_task_manufacturing_reference_cancel_and_undo"] = True
         App.closeDocument(doc.Name)
 
     def check_rejection():
@@ -243,6 +404,8 @@ def run_macro():
             check_dimensions_and_hand()
             check_ribbon_and_reopen()
             check_rejection()
+            check_internal_geometry()
+            check_internal_task()
             report["status"] = "passed"
         except Exception:
             report["error"] = traceback.format_exc()

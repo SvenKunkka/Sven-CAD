@@ -86,6 +86,13 @@ TaskHoleParameters::TaskHoleParameters(ViewProviderHole* HoleView, QWidget* pare
 
     // read values from the hole properties
     auto pcHole = getObject<PartDesign::Hole>();
+#ifdef FREECAD_PERSONAL_CAD
+    manufacturingReference = new QLabel(proxy);
+    manufacturingReference->setObjectName(QStringLiteral("HoleManufacturingReference"));
+    manufacturingReference->setWordWrap(true);
+    ui->classLayout->addWidget(manufacturingReference, 1, 0, 1, 2);
+    updateManufacturingReference(*pcHole);
+#endif
     bool isNone = std::string(pcHole->ThreadType.getValueAsString()) == "None";
     bool isThreaded = pcHole->Threaded.getValue();
 
@@ -878,11 +885,26 @@ void TaskHoleParameters::threadDirectionChanged()
     }
 }
 
+#ifdef FREECAD_PERSONAL_CAD
+void TaskHoleParameters::updateManufacturingReference(const PartDesign::Hole& hole)
+{
+    const auto& value = hole.ManufacturingLimits.getStrValue();
+    manufacturingReference->setText(value.empty() ? QString()
+        : tr("Manufacturing reference\n%1").arg(QString::fromStdString(value)));
+    manufacturingReference->setVisible(!value.empty());
+}
+#endif
+
 void TaskHoleParameters::changeEvent(QEvent* e)
 {
     TaskBox::changeEvent(e);
     if (e->type() == QEvent::LanguageChange) {
         ui->retranslateUi(proxy);
+#ifdef FREECAD_PERSONAL_CAD
+        if (auto* hole = getObject<PartDesign::Hole>()) {
+            updateManufacturingReference(*hole);
+        }
+#endif
     }
 }
 
@@ -920,6 +942,12 @@ void TaskHoleParameters::changedObject(const App::Document&, const App::Property
         widget->setDisabled(ro);
     };
 
+#ifdef FREECAD_PERSONAL_CAD
+    if (&Prop == &hole->ManufacturingLimits) {
+        updateManufacturingReference(*hole);
+        return;
+    }
+#endif
     if (&Prop == &hole->Operation) {
         updateComboBox(ui->comboOperation, hole->Operation.getValue());
     }

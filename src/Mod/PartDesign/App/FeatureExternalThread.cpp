@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 #include "FeatureExternalThread.h"
+#include "SvenMetricThreadLimits.h"
 
 #include <algorithm>
 #include <cmath>
@@ -153,9 +154,42 @@ ExternalThread::ExternalThread()
     ADD_PROPERTY_TYPE(ThreadLength, (3.0), "Thread", App::Prop_None, "Length from the start of the cylinder");
     ADD_PROPERTY_TYPE(LeftHanded, (false), "Thread", App::Prop_None, "Use a left-hand thread");
     ADD_PROPERTY_TYPE(Modeled, (true), "Thread", App::Prop_None, "Cut the thread groove into the solid");
+    ADD_PROPERTY_TYPE(ManufacturingLimits, (""), "Manufacturing",
+                      static_cast<App::PropertyType>(App::Prop_ReadOnly | App::Prop_Output),
+                      "Reference diameter limits and normal engagement length");
+    ADD_PROPERTY_TYPE(ManufacturingClass, (0L), "Manufacturing", App::Prop_NoRecompute,
+                      "Drawing tolerance class. The model uses nominal geometry.");
+    ManufacturingClass.setEnums(ManufacturingClasses);
     ADD_PROPERTY_TYPE(Pitch, (0.5), "Thread", App::Prop_ReadOnly, "Nominal thread pitch");
     ADD_PROPERTY_TYPE(MajorDiameter, (3.0), "Thread", App::Prop_ReadOnly, "Nominal major diameter");
     ADD_PROPERTY_TYPE(MinorDiameter, (2.0 * rootRadius(1.5, 0.5)), "Thread", App::Prop_ReadOnly, "Nominal minor diameter");
+}
+
+const char* ExternalThread::ManufacturingClasses[] = {"Unspecified", "6g", nullptr};
+
+void ExternalThread::updateManufacturingLimits()
+{
+    const auto* limits = ThreadSize.isValid() && ManufacturingClass.isValid()
+        && std::string_view(ManufacturingClass.getValueAsString()) == "6g"
+        ? MetricCoarseThreadLimits::find(ThreadSize.getValueAsString()) : nullptr;
+    const auto value = limits ? limits->externalReference() : std::string();
+    if (ManufacturingLimits.getStrValue() != value) {
+        ManufacturingLimits.setValue(value);
+    }
+}
+
+void ExternalThread::onChanged(const App::Property* property)
+{
+    if (property == &ThreadSize || property == &ManufacturingClass) {
+        updateManufacturingLimits();
+    }
+    Part::Feature::onChanged(property);
+}
+
+void ExternalThread::onDocumentRestored()
+{
+    Part::Feature::onDocumentRestored();
+    updateManufacturingLimits();
 }
 
 ExternalThread::Shaft ExternalThread::describe(const Part::Feature& source, const char* faceName)

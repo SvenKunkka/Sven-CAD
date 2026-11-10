@@ -24,6 +24,8 @@ public:
     App::PropertyLength ThreadLength;
     App::PropertyBool LeftHanded;
     App::PropertyBool Modeled;
+    App::PropertyEnumeration ManufacturingClass;
+    App::PropertyString ManufacturingLimits;
     App::PropertyLength Pitch;
     App::PropertyLength MajorDiameter;
     App::PropertyLength MinorDiameter;
@@ -38,6 +40,7 @@ public:
     };
 
     static const char* Sizes[];
+    static const char* ManufacturingClasses[];
     static constexpr int MaxModeledTurns = 64;
     static Shaft describe(const Part::Feature& source, const char* faceName);
     static double pitchForSize(int size);
@@ -52,6 +55,13 @@ public:
 
     App::DocumentObjectExecReturn* execute() override;
     short mustExecute() const override;
+
+protected:
+    void onChanged(const App::Property* property) override;
+    void onDocumentRestored() override;
+
+private:
+    void updateManufacturingLimits();
 };
 
 }  // namespace PartDesign

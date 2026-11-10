@@ -326,7 +326,18 @@ def run_macro():
             return wait_views(pg, config["drawing_timeout"])
         stage("drawing_schematic", lambda: project(page))
         checks["drawing_edges_schematic"] = len(view.getVisibleEdges())
+        if config.get("profile"):
+            import cProfile
+            import io
+            import pstats
+            profiler = cProfile.Profile()
+            profiler.enable()
         stage("callouts", lambda: (D.add_callouts(view), doc.recompute()))
+        if config.get("profile"):
+            profiler.disable()
+            text = io.StringIO()
+            pstats.Stats(profiler, stream=text).sort_stats("cumulative").print_stats(30)
+            (output / "callouts-profile.txt").write_text(text.getvalue(), encoding="utf-8")
         calls = D.callouts(view)
         starts = {tuple(round(c, 4) for c in c_.Proxy.spec(c_)["start"]) for c_ in calls}
         keys = {(c_.ThreadFeature.Name, c_.HoleIndex, c_.InstancePath) for c_ in calls}
@@ -409,6 +420,7 @@ def main():
     parser.add_argument("--drawing-scale", type=float, default=0.25)
     parser.add_argument("--drawing-timeout", type=int, default=900)
     parser.add_argument("--timeout", type=int, default=3600)
+    parser.add_argument("--profile", action="store_true", help="Profile the callout step")
     args = parser.parse_args()
     app = args.app.resolve()
     info = plistlib.loads((app / "Contents/Info.plist").read_bytes())
@@ -417,7 +429,7 @@ def main():
     output.mkdir(parents=True)
     signature = hashlib.sha256((app / "Contents/_CodeSignature/CodeResources").read_bytes()).hexdigest()
     config = {"links_per_variant": args.links_per_variant, "repetitions": args.repetitions,
-              "drawing_scale": args.drawing_scale, "drawing_timeout": args.drawing_timeout}
+              "drawing_scale": args.drawing_scale, "drawing_timeout": args.drawing_timeout, "profile": args.profile}
     if args.carbon:
         carbon = args.carbon.resolve()
         config["carbon"] = str(carbon)

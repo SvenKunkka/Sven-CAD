@@ -461,8 +461,22 @@ def run_macro():
         require(not clashes and not outside, (tag, "text layout", clashes, outside))
         return {"texts": len(boxes), "clashes": clashes, "outside": outside}
 
+    def check_no_stale_edges(doc, page, tag):
+        """The drawn edges equal those of a view rebuilt from scratch: no leftover callout lines."""
+        views_ = [v for v in page.getAllViews() if v.isDerivedFrom("TechDraw::DrawViewPart")]
+        before = {v.Name: len(v.getVisibleEdges()) for v in views_}
+        for v in views_:
+            v.touch()
+        doc.recompute()
+        wait_views(page)
+        QtTest.QTest.qWait(100)
+        after = {v.Name: len(v.getVisibleEdges()) for v in views_}
+        require(before == after, (tag, "stale cosmetic edges", before, after))
+        return after
+
     def export(doc, page, tag):
         pdf = exports / f"{tag}.pdf"
+        checks.setdefault("edges_before_export", {})[tag] = check_no_stale_edges(doc, page, tag)
         checks.setdefault("layout", {})[tag] = check_layout(page, tag)
         select(doc, page)
         result = {}

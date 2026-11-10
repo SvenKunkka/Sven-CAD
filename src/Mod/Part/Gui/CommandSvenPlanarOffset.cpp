@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <cmath>
 #include <exception>
-#include <limits>
 
 #include <QCoreApplication>
 #include <QDialog>
@@ -80,6 +79,15 @@ GProp_GProps faceProperties(const TopoDS_Face& face)
     return properties;
 }
 
+gp_Dir orientedPlaneNormal(const TopoDS_Face& face, const gp_Pln& plane)
+{
+    auto normal = plane.Axis().Direction();
+    if (face.Orientation() == TopAbs_REVERSED) {
+        normal.Reverse();
+    }
+    return normal;
+}
+
 bool sameSurface(const BRepAdaptor_Surface& first, const BRepAdaptor_Surface& second)
 {
     const double tolerance = 10 * Precision::Confusion();
@@ -120,13 +128,22 @@ void copyAppearance(
         return;
     }
 
-    int selectedIndex = 0;
-    App::SubObjectT(&source, supportFace).getOldElementName(&selectedIndex);
     const auto& originalShape = source.Shape.getShape();
     const auto& resultShape = result.Shape.getShape();
     const auto sourceFaces = originalShape.countSubShapes(TopAbs_FACE);
     const auto resultFaces = resultShape.countSubShapes(TopAbs_FACE);
     const size_t coloredFaces = std::min<size_t>(sourceFaces, materials.size());
+    const auto supportShape = originalShape.getSubTopoShape(supportFace, true);
+    if (supportShape.isNull() || supportShape.getShape().ShapeType() != TopAbs_FACE) {
+        return;
+    }
+    const auto& support = TopoDS::Face(supportShape.getShape());
+    const int selectedIndex = originalShape.findShape(support);
+    const BRepAdaptor_Surface supportSurface(support);
+    if (selectedIndex <= 0 || static_cast<size_t>(selectedIndex) > coloredFaces
+        || supportSurface.GetType() != GeomAbs_Plane) {
+        return;
+    }
     std::vector<int> mapped(resultFaces, -1);
     for (size_t i = 0; i < coloredFaces; ++i) {
         const auto name = "Face" + std::to_string(i + 1);
@@ -144,11 +161,7 @@ void copyAppearance(
         }
     }
 
-    const auto support = TopoDS::Face(originalShape.getSubShape(TopAbs_FACE, selectedIndex));
-    auto normal = BRepAdaptor_Surface(support).Plane().Axis().Direction();
-    if (support.Orientation() == TopAbs_REVERSED) {
-        normal.Reverse();
-    }
+    const auto normal = orientedPlaneNormal(support, supportSurface.Plane());
     const auto cap = faceProperties(support);
     const auto expectedCap = cap.CentreOfMass().Translated(gp_Vec(normal) * result.Offset.getValue());
     const double tolerance = 10 * Precision::Confusion();
@@ -157,8 +170,8 @@ void copyAppearance(
         const auto face = TopoDS::Face(resultShape.getSubShape(TopAbs_FACE, static_cast<int>(i + 1)));
         const BRepAdaptor_Surface surface(face);
         const auto props = faceProperties(face);
-        if (surface.GetType() == GeomAbs_Plane && selectedIndex > 0
-            && static_cast<size_t>(selectedIndex) <= coloredFaces
+        if (surface.GetType() == GeomAbs_Plane
+            && orientedPlaneNormal(face, surface.Plane()).IsEqual(normal, 1e-6)
             && props.CentreOfMass().Distance(expectedCap) <= tolerance
             && std::abs(props.Mass() - cap.Mass()) <= tolerance * std::sqrt(cap.Mass())) {
             appearance[i] = materials[selectedIndex - 1];
@@ -167,8 +180,8 @@ void copyAppearance(
             appearance[i] = materials[mapped[i]];
         }
         else if (surface.GetType() == GeomAbs_Plane || surface.GetType() == GeomAbs_Cylinder) {
-            // Imported faces may have no recoverable history. Match a unique nearby analytic surface.
-            double nearest = std::numeric_limits<double>::infinity();
+            // Imported faces may have no recoverable history. Use a coincident surface
+            // only when its matching source faces agree on the appearance.
             int match = -1;
             for (size_t j = 0; j < coloredFaces; ++j) {
                 const auto original = TopoDS::Face(
@@ -177,14 +190,11 @@ void copyAppearance(
                 if (!sameSurface(surface, BRepAdaptor_Surface(original))) {
                     continue;
                 }
-                const double distance = props.CentreOfMass().Distance(faceProperties(original).CentreOfMass());
-                if (std::abs(distance - nearest) <= tolerance) {
+                if (match >= 0 && materials[match] != materials[j]) {
                     match = -1;
+                    break;
                 }
-                else if (distance < nearest) {
-                    nearest = distance;
-                    match = static_cast<int>(j);
-                }
+                match = static_cast<int>(j);
             }
             if (match >= 0) {
                 appearance[i] = materials[match];

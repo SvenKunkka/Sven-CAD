@@ -273,7 +273,10 @@ def run_macro():
         try_offset(top, -6, valid=False)
         try_offset(cylinder, 1, valid=False)
         original = state()
-        face_area = source.Shape.Faces[top - 1].Area
+        source_face = source.Shape.Faces[top - 1]
+        face_area = source_face.Area
+        expected_cap = source_face.CenterOfMass + 1.25 * source_face.normalAt(0, 0)
+        source_cap_color = tuple(source.ViewObject.DiffuseColor[top - 1])
         original_volume = source.Shape.Volume
         try_offset(top, 1.25, valid=True, apply=True)
         result, = [obj for obj in doc.Objects if obj.TypeId == "Part::SvenPlanarOffset"]
@@ -287,6 +290,11 @@ def run_macro():
         require(len(result.ViewObject.DiffuseColor) == len(result.Shape.Faces)
                 and len(set(tuple(color) for color in result.ViewObject.DiffuseColor)) == 2,
                 "Offset did not preserve both source face colors")
+        cap_index, = [i for i, face in enumerate(result.Shape.Faces)
+                      if face.CenterOfMass.distanceToPoint(expected_cap) <= 1e-6
+                      and math.isclose(face.Area, face_area, abs_tol=1e-5)]
+        require(tuple(result.ViewObject.DiffuseColor[cap_index]) == source_cap_color,
+                "Offset did not retain the moved face color at its expected location")
         require(doc.UndoCount == original[1] + 1 and not source.ViewObject.Visibility,
                 "Offset did not commit exactly one undo entry and hide its source")
         doc.undo()
@@ -315,6 +323,7 @@ def run_macro():
             "reopened_negative_distance_mm": result.Offset.Value,
             "negative_volume_mm3": result.Shape.Volume,
             "preview_cancel_reject_undo_redo": True,
+            "moved_cap_color_and_location": True,
         }
         App.closeDocument(restored.Name)
 

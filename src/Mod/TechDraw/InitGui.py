@@ -47,6 +47,13 @@ class TechDrawWorkbench(Workbench):
         import TechDrawGui
 
         try:
+            import SvenDrawingGui
+        except ImportError:
+            pass
+        else:
+            SvenDrawingGui.register()
+
+        try:
             import TechDrawTools
         except ImportError as err:
             FreeCAD.Console.PrintError(

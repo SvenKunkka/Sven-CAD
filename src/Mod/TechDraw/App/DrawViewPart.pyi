@@ -260,3 +260,7 @@ class DrawViewPart(DrawView):
     def requestPaint(self) -> Any:
         """requestPaint(). Redraw the graphic for this View."""
         ...
+
+    def waitingForResult(self) -> bool:
+        """waitingForResult(). True while hidden line removal or face finding still runs."""
+        ...

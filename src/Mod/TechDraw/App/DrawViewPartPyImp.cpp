@@ -176,6 +176,14 @@ PyObject* DrawViewPartPy::requestPaint(PyObject *args)
     Py_Return;
 }
 
+PyObject* DrawViewPartPy::waitingForResult(PyObject *args)
+{
+    if (!PyArg_ParseTuple(args, "")) {
+        return nullptr;
+    }
+    return PyBool_FromLong(getDrawViewPartPtr()->waitingForResult() ? 1 : 0);
+}
+
 PyObject* DrawViewPartPy::getGeometricCenter(PyObject *args)
 {
     if (!PyArg_ParseTuple(args, "")) {

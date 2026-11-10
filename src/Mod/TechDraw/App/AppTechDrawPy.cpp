@@ -733,9 +733,22 @@ private:
                         writer.setLayerName(layerName);
                         double height = dva->TextSize.getValue();  //mm
                         int just = 1;                              //centered
-                        Base::Vector3d loc(dva->X.getValue(), dva->Y.getValue(), 0.0);
                         auto lines = dva->Text.getValues();
+#ifdef FREECAD_PERSONAL_CAD
+                        // Write every line, centred on the annotation like the page does.
+                        const double pitch = height * dva->LineSpace.getValue() / 100.0;
+                        const double top = dva->Y.getValue() + pitch * (static_cast<double>(lines.size()) - 1.0) / 2.0;
+                        for (size_t i = 0; i < lines.size(); ++i) {
+                            if (lines[i].empty()) {
+                                continue;
+                            }
+                            Base::Vector3d loc(dva->X.getValue(), top - pitch * static_cast<double>(i), 0.0);
+                            writer.exportText(lines[i].c_str(), loc, loc, height, just);
+                        }
+#else
+                        Base::Vector3d loc(dva->X.getValue(), dva->Y.getValue(), 0.0);
                         writer.exportText(lines[0].c_str(), loc, loc, height, just);
+#endif
 
                     } else if (view->isDerivedFrom<TechDraw::DrawViewDimension>()) {
                         DrawViewDimension* dvd = static_cast<TechDraw::DrawViewDimension*>(view);

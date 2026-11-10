@@ -19,6 +19,13 @@ if(BUILD_GUI)
     list (APPEND TechDraw_Scripts InitGui.py)
 endif(BUILD_GUI)
 
+if(FREECAD_PERSONAL_CAD)
+    list(APPEND TechDraw_Scripts SvenDrawing.py)
+    if(BUILD_GUI)
+        list(APPEND TechDraw_Scripts SvenDrawingGui.py)
+    endif()
+endif()
+
 set(TechDraw_ToolsScripts
     TechDrawTools/__init__.py
     TechDrawTools/CommandMoveView.py

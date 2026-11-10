@@ -313,6 +313,12 @@ Gui::ToolBarItem* Workbench::setupToolBars() const
 #endif
     *views << "TechDraw_ClipGroup";
 
+#ifdef FREECAD_PERSONAL_CAD
+    Gui::ToolBarItem* sven = new Gui::ToolBarItem(root);
+    sven->setCommand("Sven Drawing");
+    *sven << "PersonalCAD_ThreadCallouts" << "PersonalCAD_DrawingBom" << "PersonalCAD_ExportDrawing";
+#endif
+
     Gui::ToolBarItem* stacking = new Gui::ToolBarItem(root);
     stacking->setCommand("TechDraw Stacking");
     *stacking << "TechDraw_StackGroup";

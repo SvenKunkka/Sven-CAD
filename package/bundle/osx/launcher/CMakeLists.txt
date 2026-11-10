@@ -13,3 +13,5 @@ add_executable(FreeCAD FreeCAD.cpp)
 target_link_libraries(FreeCAD)
 
 add_executable(PersonalCAD EXCLUDE_FROM_ALL PersonalCAD.cpp)
+target_compile_definitions(PersonalCAD PRIVATE FREECAD_PERSONAL_CAD)
+target_include_directories(PersonalCAD PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../../../../src")

@@ -10,6 +10,8 @@
 #include <string>
 #include <vector>
 
+#include <ProductIdentity.h>
+
 int main(int, char** argv)
 {
     uint32_t executablePathSize = 0;
@@ -45,9 +47,11 @@ int main(int, char** argv)
         return EXIT_FAILURE;
     }
 
-    std::string appPath = app.string();
-    argv[0] = appPath.data();
-    execv(appPath.c_str(), argv);
+    // The embedded executable can lack a main bundle name. Cocoa then derives
+    // its About, Hide and Quit menu labels from argv[0].
+    std::string displayName = ProductIdentity::displayName;
+    argv[0] = displayName.data();
+    execv(app.c_str(), argv);
     std::perror("PersonalCAD could not launch its executable");
     return EXIT_FAILURE;
 }

@@ -16,7 +16,39 @@ import sys
 import traceback
 import FreeCAD as App
 import FreeCADGui as Gui
-from PySide import QtCore
+from PySide import QtCore, QtWidgets
+
+def verify_start_branding(expected, output):
+    window = Gui.getMainWindow()
+    start = next(widget for widget in window.findChildren(QtWidgets.QWidget)
+                 if widget.metaObject().className().endswith("StartView") and widget.isVisible())
+    labels = [label.text() for label in start.findChildren(QtWidgets.QLabel) if label.isVisible()]
+    description, = [text for text in labels if expected in text and "文件" in text]
+    assert not any("FreeCAD" in text for text in labels), labels
+    assert window.grab().save(str(output / "start-screen.png"))
+    observed = {}
+
+    def inspect_about():
+        dialog = QtWidgets.QApplication.activeModalWidget()
+        try:
+            assert dialog is not None
+            author = dialog.findChild(QtWidgets.QLabel, "labelAuthor")
+            artwork = dialog.findChild(QtWidgets.QLabel, "labelSplashPicture")
+            assert expected in author.text(), author.text()
+            assert not artwork.pixmap().isNull()
+            assert artwork.pixmap().save(str(output / "about-wordmark.png"))
+            assert dialog.grab().save(str(output / "about-screen.png"))
+            observed["title"] = dialog.windowTitle()
+        except Exception:
+            observed["error"] = traceback.format_exc()
+        finally:
+            if dialog is not None:
+                dialog.reject()
+
+    QtCore.QTimer.singleShot(100, inspect_about)
+    Gui.runCommand("Std_About")
+    assert "title" in observed, observed
+    return {"start_description": description, "about_title": observed["title"]}
 
 def verify_profile():
     marker = Path(os.environ["PERSONALCAD_PROFILE_EVIDENCE"])
@@ -46,6 +78,8 @@ def verify_profile():
         assert result["translated_unnamed"] != "Unnamed"
         assert result["length"].endswith("mm"), result["length"]
         assert not result["legacy_addon_path"]
+        if expected := os.environ.get("SVEN_EXPECT_START_BRANDING"):
+            result["startup_branding"] = verify_start_branding(expected, marker.parent)
         path = Path(os.environ["PERSONALCAD_PROFILE_SAMPLE"])
         doc = App.openDocument(str(path))
         result["opened_objects"] = len(doc.Objects)
@@ -86,7 +120,10 @@ def main():
     parser.add_argument("--sample", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--expected-display-name")
+    parser.add_argument("--check-start-branding", action="store_true")
     args = parser.parse_args()
+    if args.check_start_branding and not args.expected_display_name:
+        parser.error("--check-start-branding requires --expected-display-name")
     app = args.app.resolve()
     output = args.output.resolve()
     output.mkdir(parents=True)
@@ -126,6 +163,8 @@ def main():
         "PERSONALCAD_PROFILE_EVIDENCE": marker,
         "PERSONALCAD_PROFILE_SAMPLE": sample,
     }
+    if args.check_start_branding:
+        env["SVEN_EXPECT_START_BRANDING"] = args.expected_display_name
     environment_options = [arg for key, value in env.items() for arg in ("--env", f"{key}={value}")]
     subprocess.run([
         "/usr/bin/open", "-n", "-W", "-g", "--stdout", str(output / "open.stdout"),

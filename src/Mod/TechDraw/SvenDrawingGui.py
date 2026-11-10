@@ -97,15 +97,22 @@ def wait_for_views(page, timeout=120.0):
     return False
 
 
-def open_page(page):
-    """Show the page so it has a scene to print; a page never opened cannot be written as PDF."""
+def write_pdf(page, path):
+    """Print the page as PDF, opening it first when it has never been shown."""
     import TechDrawGui
-    if TechDrawGui.getSceneForPage(page) is None:
-        page.ViewObject.doubleClicked()
+    try:
+        TechDrawGui.exportPageAsPdf(page, path)
+        return
+    except RuntimeError:
+        # A page that was never opened has no template on its scene yet.
+        page.ViewObject.show()
         Gui.updateGui()
-    if TechDrawGui.getSceneForPage(page) is None:
+        wait_for_views(page)
+    try:
+        TechDrawGui.exportPageAsPdf(page, path)
+    except RuntimeError as error:
         import SvenDrawing
-        raise SvenDrawing.DrawingError(tr("Open the drawing page before exporting it."))
+        raise SvenDrawing.DrawingError(tr("Open the drawing page before exporting it.")) from error
 
 
 def export_drawing(page, pdf_path):
@@ -115,7 +122,6 @@ def export_drawing(page, pdf_path):
     import SvenDrawing
 
     base = os.path.splitext(pdf_path)[0]
-    open_page(page)
     page.Document.recompute()
     refresh_bom_tables(page.Document)
     if not wait_for_views(page):
@@ -123,7 +129,7 @@ def export_drawing(page, pdf_path):
     page.Document.recompute()
     wait_for_views(page)
     written = []
-    TechDrawGui.exportPageAsPdf(page, base + ".pdf")
+    write_pdf(page, base + ".pdf")
     written.append(base + ".pdf")
     TechDraw.writeDXFPage(page, base + ".dxf")
     written.append(base + ".dxf")

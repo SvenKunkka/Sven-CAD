@@ -116,44 +116,62 @@ def _feature_threads(obj, xform):
     return []
 
 
-def thread_specs(objects):
-    """Threads and threaded holes reachable from the given drawing sources, in global coordinates."""
+def thread_specs(objects, only=None):
+    """Threads and threaded holes reachable from the given drawing sources, in global coordinates.
+
+    Each thread carries the path of links that leads to it, so every linked instance of a part
+    is its own thread. ``only`` = (feature, path) limits the walk to one instance of one feature.
+    """
     found = []
     seen = set()
 
-    def visit(obj, xform, visible_only):
+    def visit(obj, xform, path):
         if obj is None or not hasattr(obj, "TypeId"):
             return
-        key = (obj.Document.Name, obj.Name, tuple(round(v, 9) for v in xform.toMatrix().A))
+        key = (obj.Document.Name, obj.Name, path)
         if key in seen:
             return
         seen.add(key)
         if obj.isDerivedFrom("App::Link"):
+            inner = path + (obj.Name,)
+            if only is not None and only[1][:len(inner)] != inner:
+                return
             target = obj.LinkedObject
             if target is not None:
                 link_global = _global(obj)
-                visit(target, xform.multiply(link_global).multiply(_global(target).inverse()), True)
+                visit(target, xform.multiply(link_global).multiply(_global(target).inverse()), inner)
             return
-        found.extend(_feature_threads(obj, xform))
+        if only is None or (obj == only[0] and path == only[1]):
+            for spec in _feature_threads(obj, xform):
+                spec["path"] = path
+                found.append(spec)
         if obj.TypeId in THREAD_TYPES:
             support = obj.Support[0] if obj.Support else None
-            visit(support, xform, False)
+            visit(support, xform, path)
         elif obj.TypeId == "PartDesign::Body":
-            visit(obj.Tip, xform, False)
+            visit(obj.Tip, xform, path)
         elif hasattr(obj, "BaseFeature") and obj.TypeId.startswith("PartDesign::"):
-            visit(obj.BaseFeature, xform, False)
+            visit(obj.BaseFeature, xform, path)
         elif obj.isDerivedFrom("App::Part") or obj.TypeId == "Assembly::AssemblyObject":
             for child in obj.Group:
                 if getattr(child, "Visibility", True):
-                    visit(child, xform, True)
+                    visit(child, xform, path)
 
     for obj in objects:
-        visit(obj, App.Placement(), True)
+        visit(obj, App.Placement(), ())
     return found
 
 
-def view_threads(view):
-    return thread_specs(list(view.Source) + list(getattr(view, "XSource", [])))
+def view_threads(view, only=None):
+    return thread_specs(list(view.Source) + list(getattr(view, "XSource", [])), only)
+
+
+def _path_text(path):
+    return "/".join(path)
+
+
+def _path_of(text):
+    return tuple(text.split("/")) if text else ()
 
 
 # ---------------------------------------------------------------- view geometry
@@ -262,6 +280,8 @@ class ThreadCallout:
         obj.addProperty("App::PropertyLinkGlobal", "SourceView", CALLOUT_GROUP, "Drawing view that shows the thread")
         obj.addProperty("App::PropertyLinkGlobal", "ThreadFeature", CALLOUT_GROUP, "Thread, internal thread or hole")
         obj.addProperty("App::PropertyInteger", "HoleIndex", CALLOUT_GROUP, "Hole of a multi-hole feature")
+        obj.addProperty("App::PropertyString", "InstancePath", CALLOUT_GROUP,
+                        "Links from the view source to the threaded part instance")
         obj.addProperty("App::PropertyVector", "TextOffset", CALLOUT_GROUP, "Text position from the thread, page mm")
         obj.addProperty("App::PropertyString", "ThreadSpec", CALLOUT_GROUP, "Callout text from the model")
         obj.addProperty("App::PropertyString", "Representation", CALLOUT_GROUP, "End, side or oblique view")
@@ -274,6 +294,7 @@ class ThreadCallout:
         obj.SourceView = view
         obj.ThreadFeature = spec["feature"]
         obj.HoleIndex = spec["index"]
+        obj.InstancePath = _path_text(spec.get("path", ()))
         obj.TextSize = TEXT_SIZE
         obj.TextOffset = App.Vector(12, 10, 0)
 
@@ -287,8 +308,9 @@ class ThreadCallout:
         view = obj.SourceView
         if view is None or obj.ThreadFeature is None:
             raise DrawingError("The callout has lost its view or thread.")
-        for spec in view_threads(view):
-            if spec["feature"] == obj.ThreadFeature and spec["index"] == obj.HoleIndex:
+        path = _path_of(getattr(obj, "InstancePath", ""))
+        for spec in view_threads(view, (obj.ThreadFeature, path)):
+            if spec["index"] == obj.HoleIndex:
                 return spec
         raise DrawingError(f"{obj.ThreadFeature.Label} is no longer shown in {view.Label}.")
 
@@ -399,12 +421,12 @@ def add_callouts(view):
         raise DrawingError("The view is not on a drawing page.")
     if not view.getVisibleEdges():
         raise DrawingError("The view has no geometry yet. Recompute it and try again.")
-    existing = {(c.ThreadFeature, c.HoleIndex) for c in callouts(view)}
+    existing = {(c.ThreadFeature, c.HoleIndex, _path_of(getattr(c, "InstancePath", ""))) for c in callouts(view)}
     taken = page_text_boxes(page)
     center = view_center(view)
     created = []
     for spec in view_threads(view):
-        if (spec["feature"], spec["index"]) in existing:
+        if (spec["feature"], spec["index"], spec["path"]) in existing:
             continue
         obj = view.Document.addObject("TechDraw::DrawViewAnnotationPython", "ThreadCallout")
         ThreadCallout(obj, view, spec)

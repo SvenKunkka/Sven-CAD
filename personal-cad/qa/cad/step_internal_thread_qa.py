@@ -491,6 +491,12 @@ def run_macro():
         assert_result(doc, part, source, thread, spec, major, pitch, bore, 3.0, True, True, before)
         volume = thread.Shape.Volume
         assert window.grab().save(str(shots / "after-create.png"))
+        view = Gui.activeDocument().activeView()
+        view.viewIsometric()
+        view.fitAll()
+        QtTest.QTest.qWait(200)
+        view.saveImage(str(shots / "viewport-threaded-through-hole.png"), 1200, 900, "White")
+        assert (shots / "viewport-threaded-through-hole.png").stat().st_size > 10000
         doc.undo()
         assert doc.getObject(name) is None and source.ViewObject.Visibility
         assert snapshot(doc, source)[:1] == before[:1] and doc.UndoCount == before[1]
@@ -670,12 +676,14 @@ def run_macro():
         QtTest.QTest.qWait(400)
         info = {"locale": name}
         try:
+            doc = new_document("StepInternalThreadZhQA")
+            part, source = import_step(doc, fixture("through-M3x0.5", through(2.5)))
+            Gui.activeDocument().activeView().fitAll()
+            QtTest.QTest.qWait(300)
             button = ribbon_button()
             info["button"] = button.text()
             assert button.text() == "内螺纹", button.text()
             assert window.grab().save(str(shots / "ribbon-zh.png"))
-            doc = new_document("StepInternalThreadZhQA")
-            part, source = import_step(doc, fixture("through-M3x0.5", through(2.5)))
             select(doc, part, f"{source.Name}.{bore_face(source.Shape, 1.25)}")
             before = snapshot(doc, source)
             dlg = {}

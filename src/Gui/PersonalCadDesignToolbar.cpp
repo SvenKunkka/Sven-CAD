@@ -450,9 +450,11 @@ void DesignToolbar::rebuildGroups(int tab)
                "Part_Slice", "Part_Scale", "Std_Alignment", "Part_ColorPerFace",
                "Part_RefineShape"});
         group(*row, {"Assemble", "装配"},
-              {{"PersonalCAD_Joint", {"Joint", "联接"}, "Link"}},
+              {{"PersonalCAD_Joint", {"Joint", "联接"}, "Link"},
+               {"PersonalCAD_InsertFastener", {"Fastener", "紧固件"}, "Link"}},
               {"Assembly_CreateAssembly", "Assembly_InsertLink", "Assembly_InsertNewPart",
-               "Assembly_CreateJointRigidGroup", "Assembly_ToggleGrounded"});
+               "Assembly_CreateJointRigidGroup", "Assembly_ToggleGrounded",
+               "PersonalCAD_ReplaceFastener", "PersonalCAD_FastenerSummary"});
     }
     else if (tab == Surface) {
         group(*row, {"Create", "创建"},
@@ -470,7 +472,9 @@ void DesignToolbar::rebuildGroups(int tab)
     }
     else if (tab == Assembly) {
         group(*row, {"Insert", "插入"},
-              {{"Assembly_InsertLink", {"Insert Component", "插入零件"}}}, {"Std_Import"});
+              {{"Assembly_InsertLink", {"Insert Component", "插入零件"}},
+               {"PersonalCAD_InsertFastener", {"Fastener", "紧固件"}, "Link"}},
+              {"Std_Import", "PersonalCAD_ReplaceFastener", "PersonalCAD_FastenerSummary"});
         group(*row, {"Create", "创建"},
               {{"Assembly_CreateAssembly", {"New Assembly", "新建装配"}},
                {"Assembly_InsertNewPart", {"New Component", "新建零件"}}});

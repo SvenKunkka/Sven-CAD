@@ -311,3 +311,10 @@ class AssemblyWorkbench(Workbench):
 
 
 Gui.addWorkbench(AssemblyWorkbench())
+
+try:
+    import SvenFastenersGui
+except ImportError:
+    pass
+else:
+    SvenFastenersGui.register()

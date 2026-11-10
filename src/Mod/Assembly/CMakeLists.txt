@@ -39,13 +39,16 @@ set(Assembly_Scripts
 )
 
 if(FREECAD_PERSONAL_CAD)
-    list(APPEND Assembly_Scripts StaticBom.py)
+    list(APPEND Assembly_Scripts StaticBom.py SvenFasteners.py SvenFastenersCatalog.json)
 else()
     list(APPEND Assembly_Scripts CommandCreateSimulation.py)
 endif()
 
 if(BUILD_GUI)
     list (APPEND Assembly_Scripts InitGui.py)
+    if(FREECAD_PERSONAL_CAD)
+        list(APPEND Assembly_Scripts SvenFastenersGui.py)
+    endif()
 endif(BUILD_GUI)
 
 INSTALL(

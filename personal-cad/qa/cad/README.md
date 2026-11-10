@@ -128,5 +128,6 @@ the default GUI STEP settings, and records fresh-profile launch, import to
 fitted view, selection and orbit latency, recompute, native save and reopen,
 STEP reimport, and process peak RSS. The viewport receives twenty local Qt
 selection and Shift-middle orbit sequences by default. Round-trip checks
-compare assembly grouping, transformed B-Rep solid bounds and volumes, and per-part
-face color counts at FCStd's 8-bit RGB precision.
+compare assembly grouping, transformed solid volumes and conservative B-Rep
+bounds without viewer tessellation, and per-part face color counts at FCStd's
+8-bit RGB precision.

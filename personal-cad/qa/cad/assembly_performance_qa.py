@@ -64,10 +64,11 @@ def box_coordinates(box):
     return (box.XMin, box.YMin, box.ZMin, box.XMax, box.YMax, box.ZMax)
 
 
-def exact_bounds(shape):
-    # The ordinary BoundBox depends on the viewer's tessellation. Use the B-Rep
-    # for comparisons across save/reopen and STEP conversion.
-    return box_coordinates(shape.optimalBoundingBox(False, False))
+def conservative_bounds(shape):
+    # Bounds must be independent of the viewport's tessellation. A geometry
+    # copy without mesh data keeps the B-Rep bound cheap on large assemblies.
+    geometry = shape.copy(True, False, noElementMap=True)
+    return box_coordinates(geometry.BoundBox)
 
 
 def color_byte(component):
@@ -88,9 +89,9 @@ def describe_document(document):
     roots = [root for root in document.RootObjects if root.Visibility]
     shape = Part.makeCompound([Part.getShape(root) for root in roots])
     solids = shape.Solids
-    bounds = exact_bounds(shape)
+    bounds = conservative_bounds(shape)
     # Compare transformed solids rather than only checking overall dimensions.
-    solid_metrics = sorted((*exact_bounds(solid), solid.Volume) for solid in solids)
+    solid_metrics = sorted((*conservative_bounds(solid), solid.Volume) for solid in solids)
     colors = Counter()
     part_colors = []
     for obj in document.Objects:
@@ -110,7 +111,7 @@ def describe_document(document):
             face_colors *= len(part.Faces)
         palette = Counter(face_colors)
         colors.update(palette)
-        part_colors.append((exact_bounds(part), sorted(palette.items())))
+        part_colors.append((conservative_bounds(part), sorted(palette.items())))
     return {
         "roots": [root.TypeId for root in roots],
         "assembly_tree": sorted(group_signature(root) for root in roots),
@@ -318,6 +319,7 @@ def run_macro(settings):
             "tier": settings["tier"],
             "version": App.Version(),
             "window_title": Gui.getMainWindow().windowTitle(),
+            "bounds_method": "conservative B-Rep bounds without display triangulation",
             "duration_s": {"launch_to_macro": monotonic() - settings["launch"]},
             "peak_rss_mib_by_stage": {},
             "checks": {},
@@ -465,6 +467,7 @@ def main():
         "bundle_id": info["CFBundleIdentifier"],
         "bundle_version": info["CFBundleVersion"],
         "code_resources_sha256": sha256(code_resources.read_bytes()).hexdigest() if code_resources.is_file() else None,
+        "qa_script_sha256": sha256(Path(__file__).read_bytes()).hexdigest(),
         "macOS": platform.mac_ver()[0],
         "architecture": platform.machine(),
         "model": subprocess.check_output(["/usr/sbin/sysctl", "-n", "hw.model"], text=True).strip(),
@@ -516,7 +519,7 @@ def main():
     host["status"] = "passed" if host.get("freecad_exit") == 0 and report.get("status") == "passed" else "failed"
     write_json(output / "run-result.json", host)
     if args.tier != "generate":
-        fields = ("status", "version", "window_title", "input_step", "output_step", "fcstd_bytes", "step_roundtrip", "duration_s",
+        fields = ("status", "version", "window_title", "bounds_method", "input_step", "output_step", "fcstd_bytes", "step_roundtrip", "duration_s",
                   "peak_rss_mib", "peak_rss_mib_by_stage", "checks", "error")
         summary = {field: report[field] for field in fields if field in report}
         summary["status"] = host["status"]

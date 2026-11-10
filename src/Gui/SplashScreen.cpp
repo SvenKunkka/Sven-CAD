@@ -41,6 +41,7 @@
 #include <App/Application.h>
 #include <App/Metadata.h>
 #include <Base/Console.h>
+#include <ProductIdentity.h>
 
 #include "BitmapFactory.h"
 #include "SplashScreen.h"
@@ -229,12 +230,6 @@ static void renderDevBuildWarning(
     painter.drawText(box, Qt::AlignCenter, devWarning);
 }
 
-QPixmap SplashScreen::defaultSplashImage()
-{
-    constexpr QSizeF splashSize(480.0, 220.0);
-    return BitmapFactory().pixmapFromSvg(":/icons/freecadsplash.svg", splashSize);
-}
-
 static QFont defaultSplashFont(const QFont& fallback)
 {
     static const QString fontFamily = []() {
@@ -256,6 +251,24 @@ static QFont defaultSplashFont(const QFont& fallback)
         font.setStyleName(QStringLiteral("Demi"));
     }
     return font;
+}
+
+QPixmap SplashScreen::defaultSplashImage()
+{
+    constexpr QSizeF splashSize(480.0, 220.0);
+#ifdef FREECAD_PERSONAL_CAD
+    auto image = BitmapFactory().pixmapFromSvg(":/icons/svencadsplash.svg", splashSize);
+    QPainter painter(&image);
+    QFont font = defaultSplashFont(painter.font());
+    font.setPixelSize(45);
+    painter.setFont(font);
+    painter.setPen(QColor(QStringLiteral("#212529")));
+    painter.drawText(QPointF(155, 113), QLatin1String(ProductIdentity::displayName));
+    painter.end();
+    return image;
+#else
+    return BitmapFactory().pixmapFromSvg(":/icons/freecadsplash.svg", splashSize);
+#endif
 }
 
 }  // namespace Gui
@@ -426,7 +439,7 @@ QPixmap SplashScreen::splashImage()
 
         QColor color(QString::fromStdString(tc->second));
         QColor warningColor(QString::fromStdString(wc->second));
-        if (usingDefaultSplash && title == QStringLiteral("FreeCAD") && color.isValid()) {
+        if (usingDefaultSplash && title == QLatin1String(ProductIdentity::displayName) && color.isValid()) {
             QFont numberFont = painter.font();
             if (!customFontApplied) {
                 numberFont = defaultSplashFont(numberFont);
@@ -434,12 +447,16 @@ QPixmap SplashScreen::splashImage()
             numberFont.setPixelSize(20);
             painter.setPen(color);
 
+#ifdef FREECAD_PERSONAL_CAD
+            constexpr qreal numberPosition = 155;
+            constexpr qreal versionBaseline = 147;
+#else
             const QFontMetricsF numberMetrics(numberFont);
             const QRectF numberBounds = numberMetrics.boundingRect(versionText);
-            // Match the version line to the wordmark geometry in freecadsplash.svg.
             constexpr qreal versionRight = 418;
             constexpr qreal versionBaseline = 158;
             const qreal numberPosition = versionRight - numberBounds.right();
+#endif
             painter.setFont(numberFont);
             painter.drawText(QPointF(numberPosition, versionBaseline), versionText);
 

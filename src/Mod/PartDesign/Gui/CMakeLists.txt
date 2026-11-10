@@ -259,6 +259,10 @@ SET(PartDesignGuiIcon_SVG
 
 add_library(PartDesignGui SHARED ${PartDesignGui_SRCS} ${PartDesignGuiIcon_SVG})
 
+if(FREECAD_PERSONAL_CAD)
+    target_sources(PartDesignGui PRIVATE CommandExternalThread.cpp)
+endif()
+
 if(FREECAD_USE_PCH)
     target_precompile_headers(PartDesignGui PRIVATE
             $<$<COMPILE_LANGUAGE:CXX>:"${CMAKE_CURRENT_LIST_DIR}/PreCompiled.h">

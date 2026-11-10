@@ -3043,6 +3043,10 @@ public:
 // Initialization
 //===========================================================================
 
+#ifdef FREECAD_PERSONAL_CAD
+void CreateExternalThreadCommand();
+#endif
+
 void CreatePartDesignCommands()
 {
     Gui::CommandManager& rcCmdMgr = Gui::Application::Instance->commandManager();
@@ -3075,6 +3079,9 @@ void CreatePartDesignCommands()
     rcCmdMgr.addCommand(new CmdPartDesignPad());
     rcCmdMgr.addCommand(new CmdPartDesignPocket());
     rcCmdMgr.addCommand(new CmdPartDesignHole());
+#ifdef FREECAD_PERSONAL_CAD
+    CreateExternalThreadCommand();
+#endif
     rcCmdMgr.addCommand(new CmdPartDesignRevolution());
     rcCmdMgr.addCommand(new CmdPartDesignGroove());
     rcCmdMgr.addCommand(new CmdPartDesignAdditivePipe);

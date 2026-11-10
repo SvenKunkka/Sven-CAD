@@ -428,6 +428,9 @@ Gui::MenuItem* Workbench::setupMenuBar() const
 
     *subtractives << "PartDesign_Pocket"
                   << "PartDesign_Hole"
+#ifdef FREECAD_PERSONAL_CAD
+                  << "PartDesign_ExternalThread"
+#endif
                   << "PartDesign_Groove"
                   << "PartDesign_SubtractiveLoft"
                   << "PartDesign_SubtractivePipe"
@@ -524,6 +527,9 @@ Gui::ToolBarItem* Workbench::setupToolBars() const
           << "Separator"
           << "PartDesign_Pocket"
           << "PartDesign_Hole"
+#ifdef FREECAD_PERSONAL_CAD
+          << "PartDesign_ExternalThread"
+#endif
           << "PartDesign_Groove"
           << "PartDesign_SubtractiveLoft"
           << "PartDesign_SubtractivePipe"

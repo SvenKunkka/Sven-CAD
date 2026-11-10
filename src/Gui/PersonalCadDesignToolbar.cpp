@@ -404,7 +404,8 @@ void DesignToolbar::rebuildGroups(int tab)
             group(*row, {"Create", "创建"},
                   {{newSketch, {"Create Sketch", "创建草图"}},
                    {"PersonalCAD_Extrude", {"Extrude", "拉伸"}},
-                   {"Part_Revolve", {"Revolve", "旋转"}}},
+                   {"Part_Revolve", {"Revolve", "旋转"}},
+                   {"PartDesign_ExternalThread", {"External Thread", "外螺纹"}}},
                   {"Part_Primitives", "Part_Sweep", "Part_Loft", "Part_Mirror",
                    "PartDesign_Hole", "PartDesign_LinearPattern"});
         }
@@ -414,6 +415,7 @@ void DesignToolbar::rebuildGroups(int tab)
                    {"PersonalCAD_Extrude", {"Extrude", "拉伸"}},
                    {"PartDesign_Revolution", {"Revolve", "旋转"}},
                    {"PartDesign_Hole", {"Hole", "孔"}},
+                   {"PartDesign_ExternalThread", {"External Thread", "外螺纹"}},
                    {"PartDesign_LinearPattern", {"Pattern", "阵列"}}},
                   {"PartDesign_Body", "PartDesign_Pocket", "PartDesign_Groove",
                    "PartDesign_AdditivePipe", "PartDesign_AdditiveLoft",

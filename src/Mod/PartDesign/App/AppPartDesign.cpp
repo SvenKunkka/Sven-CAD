@@ -43,6 +43,9 @@
 #include "FeatureGroove.h"
 #include "FeatureHelix.h"
 #include "FeatureHole.h"
+#ifdef FREECAD_PERSONAL_CAD
+#include "FeatureExternalThread.h"
+#endif
 #include "FeatureCircularPattern.h"
 #include "FeatureLinearPattern.h"
 #include "FeatureLoft.h"
@@ -112,6 +115,9 @@ PyMOD_INIT_FUNC(_PartDesign)
     PartDesign::Scaled                      ::init();
     PartDesign::MultiTransform              ::init();
     PartDesign::Hole                        ::init();
+#ifdef FREECAD_PERSONAL_CAD
+    PartDesign::ExternalThread              ::init();
+#endif
     PartDesign::Body                        ::init();
     PartDesign::FeatureExtrude              ::init();
     PartDesign::Pad                         ::init();

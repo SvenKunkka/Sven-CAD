@@ -4911,7 +4911,142 @@ over 90: larger hole radius at the bottom</source>
     </message>
   </context>
   <context>
+    <name>CmdPartDesignExternalThread</name>
+    <message>
+      <source>External Thread</source>
+      <translation>外螺纹</translation>
+    </message>
+    <message>
+      <source>External Thread %1</source>
+      <translation>外螺纹 %1</translation>
+    </message>
+    <message>
+      <source>Create a nominal metric external thread on a shaft</source>
+      <translation>在轴上创建公称尺寸的公制外螺纹</translation>
+    </message>
+    <message>
+      <source>Size</source>
+      <translation>规格</translation>
+    </message>
+    <message>
+      <source>Thread length</source>
+      <translation>螺纹长度</translation>
+    </message>
+    <message>
+      <source>Right-hand</source>
+      <translation>右旋</translation>
+    </message>
+    <message>
+      <source>Left-hand</source>
+      <translation>左旋</translation>
+    </message>
+    <message>
+      <source>Hand</source>
+      <translation>旋向</translation>
+    </message>
+    <message>
+      <source>Model thread grooves</source>
+      <translation>生成实体牙槽</translation>
+    </message>
+    <message>
+      <source>Clear the checkbox to save thread parameters with the original shaft geometry.</source>
+      <translation>取消勾选可保留原有轴形，并保存螺纹参数。</translation>
+    </message>
+    <message>
+      <source>Choose the nominal size that matches the shaft diameter.</source>
+      <translation>请选择与轴径相符的公称规格。</translation>
+    </message>
+    <message>
+      <source>Enter a positive thread length.</source>
+      <translation>请输入大于零的螺纹长度。</translation>
+    </message>
+    <message>
+      <source>Select one exterior cylindrical face of a solid.</source>
+      <translation>请选择实体的一个外圆柱面。</translation>
+    </message>
+  </context>
+  <context>
     <name>Exception</name>
+    <message>
+      <source>Select a supported metric thread size.</source>
+      <translation>请选择受支持的公制螺纹规格。</translation>
+    </message>
+    <message>
+      <source>The thread groove could not be built.</source>
+      <translation>无法生成螺纹牙槽。</translation>
+    </message>
+    <message>
+      <source>Select a face of a valid single solid.</source>
+      <translation>请选择一个有效单实体上的面。</translation>
+    </message>
+    <message>
+      <source>Select one exterior cylindrical face.</source>
+      <translation>请选择一个外圆柱面。</translation>
+    </message>
+    <message>
+      <source>Select one full exterior cylindrical face.</source>
+      <translation>请选择一个完整的外圆柱面。</translation>
+    </message>
+    <message>
+      <source>Select an exterior shaft, not a hole.</source>
+      <translation>请选择轴的外圆柱面。</translation>
+    </message>
+    <message>
+      <source>The shaft diameter does not match M2, M2.5, M3, or M4.</source>
+      <translation>轴径与 M2、M2.5、M3、M4 的公称尺寸均不匹配。</translation>
+    </message>
+    <message>
+      <source>The selected size does not match the shaft diameter.</source>
+      <translation>所选规格与轴径不符。</translation>
+    </message>
+    <message>
+      <source>Thread length must be positive and fit the cylindrical face.</source>
+      <translation>螺纹长度须大于零，且在圆柱面的长度范围内。</translation>
+    </message>
+    <message>
+      <source>Modeled threads are limited to 64 turns.</source>
+      <translation>实体螺纹最多支持 64 圈。</translation>
+    </message>
+    <message>
+      <source>The thread did not produce a valid single solid.</source>
+      <translation>螺纹运算未生成有效的单实体。</translation>
+    </message>
+    <message>
+      <source>The shaft wall is too thin for the complete thread groove.</source>
+      <translation>轴的壁厚不足以容纳完整牙槽。</translation>
+    </message>
+    <message>
+      <source>Select one exterior cylindrical face in the same part.</source>
+      <translation>请选择同一零件内的一个外圆柱面。</translation>
+    </message>
+    <message>
+      <source>The geometry kernel could not build the external thread.</source>
+      <translation>几何内核未能生成外螺纹。</translation>
+    </message>
+    <message>
+      <source>Select one exterior cylindrical face of a solid.</source>
+      <translation>请选择实体的一个外圆柱面。</translation>
+    </message>
+    <message>
+      <source>Select the source shaft instead of an instance.</source>
+      <translation>请选择实例对应的源轴。</translation>
+    </message>
+    <message>
+      <source>Select a shaft outside a Part Design body.</source>
+      <translation>请选择 Part Design 实体外的独立轴。</translation>
+    </message>
+    <message>
+      <source>Finish the current document operation before threading.</source>
+      <translation>请先完成当前文档操作，再创建螺纹。</translation>
+    </message>
+    <message>
+      <source>The document could not start a thread transaction.</source>
+      <translation>无法启动外螺纹操作。</translation>
+    </message>
+    <message>
+      <source>The external thread could not be added.</source>
+      <translation>无法添加外螺纹。</translation>
+    </message>
     <message>
       <location filename="../../../App/Body.cpp" line="426"/>
       <source>Linked object is not a PartDesign feature</source>

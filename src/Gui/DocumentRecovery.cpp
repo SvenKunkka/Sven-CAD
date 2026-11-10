@@ -35,6 +35,7 @@
 #include <QFileInfo>
 #include <QHeaderView>
 #include <QList>
+#include <QLocale>
 #include <QMap>
 #include <QMenu>
 #include <QMessageBox>
@@ -207,6 +208,10 @@ DocumentRecovery::DocumentRecovery(const QList<QFileInfo>& dirs, QWidget* parent
                 item->setText(1, tr("Not yet recovered"));
             }
             item->setToolTip(1, info.projectFile);
+            const auto snapshotTime = QFileInfo(info.projectFile).lastModified();
+            if (snapshotTime.isValid()) {
+                item->setText(2, QLocale().toString(snapshotTime, QLocale::ShortFormat));
+            }
             d_ptr->ui.treeWidget->addTopLevelItem(item);
         }
     }
@@ -360,6 +365,10 @@ void DocumentRecovery::accept()
 
         d->ui.buttonBox->button(QDialogButtonBox::Ok)->setText(tr("&Finish"));
         d->ui.buttonBox->button(QDialogButtonBox::Cancel)->setEnabled(false);
+        d->ui.label->setText(tr(
+            "Select Finish to review your recovered documents. To keep a separate copy, "
+            "choose File > Save As."
+        ));
         d->recovered = true;
     }
     else {

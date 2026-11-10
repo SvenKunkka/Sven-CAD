@@ -8,9 +8,9 @@ Use a native arm64 terminal on Apple Silicon with macOS 15 or later. Install Xco
 bash personal-cad/toolchain/build-macos.sh
 ```
 
-应用包生成在 `.personal-cad-build/artifacts/personal/PersonalCAD.app`，使用本地临时签名。构建脚本会核验包内动态库依赖和签名，并以隔离配置运行命令行冒烟测试。图形界面与 macOS 辅助功能需要单独测试。本目录用于复建源码，先前验证的应用包哈希仍对应当时的本机产物。
+应用包生成在 `.personal-cad-build/artifacts/personal/Sven CAD.app`，使用本地临时签名。构建脚本会核验包内动态库依赖、源码提交和签名，并以隔离配置运行命令行冒烟测试。图形界面与 macOS 辅助功能需要单独测试。本目录用于复建源码，先前验证的应用包哈希仍对应当时的本机产物。
 
-The locally ad-hoc signed app is staged at `.personal-cad-build/artifacts/personal/PersonalCAD.app`. Staging checks library dependencies and signatures and runs a CLI smoke test with an isolated profile. GUI and macOS Accessibility require separate testing. These scripts rebuild from source. The earlier verification digests identify the binaries tested at that time.
+The locally ad-hoc signed app is staged at `.personal-cad-build/artifacts/personal/Sven CAD.app`. Staging checks library dependencies, the source revision and signatures and runs a CLI smoke test with an isolated profile. GUI and macOS Accessibility require separate testing. These scripts rebuild from source. The earlier verification digests identify the binaries tested at that time.
 
 ## 构建选项 / Build options
 

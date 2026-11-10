@@ -421,6 +421,16 @@ def prepare_contents(app, edition, paths, installed_prefix, app_files, qt_digest
     if personal:
         run("/usr/bin/python3", CANDIDATE / "package/bundle/osx/personalize_info_plist.py",
             original_info, info_path)
+        info = plistlib.loads(info_path.read_bytes())
+        version_header = (installed_prefix.parent / "src/Build/Version.h").read_text()
+        version_values = dict(re.findall(r'^#define\s+(FC\w+)\s+"([^"]*)"', version_header, re.M))
+        version = ".".join(version_values[f"FCVersion{part}"] for part in ("Major", "Minor", "Point"))
+        info["CFBundleShortVersionString"] = version
+        info["CFBundleVersion"] = version
+        info["SvenCADSourceRevision"] = version_values["FCRepositoryHash"]
+        if info["SvenCADSourceRevision"] != run("git", "-C", CANDIDATE, "rev-parse", "HEAD").strip():
+            raise ValueError("The built source revision does not match the checkout.")
+        info_path.write_bytes(plistlib.dumps(info))
         launcher = WORK / "personal-launcher/PersonalCAD"
     else:
         copy_file(original_info, info_path)
@@ -507,7 +517,13 @@ def prepare_contents(app, edition, paths, installed_prefix, app_files, qt_digest
         name: hashlib.sha256((resources / "bin" / name).read_bytes()).hexdigest()
         for name in ("FreeCAD", "FreeCADCmd")
     }
-    evidence["bundle_identifier"] = plistlib.loads(info_path.read_bytes())["CFBundleIdentifier"]
+    info = plistlib.loads(info_path.read_bytes())
+    evidence["bundle_identifier"] = info["CFBundleIdentifier"]
+    if personal:
+        evidence["source_revision"] = info["SvenCADSourceRevision"]
+        evidence["bundle_version"] = info["CFBundleShortVersionString"]
+        evidence["bundle_display_name"] = info["CFBundleDisplayName"]
+        evidence["bundle_code_resources_sha256"] = sha256(contents / "_CodeSignature/CodeResources")
     return evidence
 
 
@@ -536,7 +552,7 @@ def main():
     qt_digests = qt_output_digests(args.qt_build_receipt)
     evidence["source_install_files"] = len(app_files)
     evidence["source_install_receipt_sha256"] = receipt_hash
-    dest = (args.output / args.edition / ("PersonalCAD.app" if personal else "FreeCAD.app")).resolve()
+    dest = (args.output / args.edition / ("Sven CAD.app" if personal else "FreeCAD.app")).resolve()
     dest.parent.mkdir(parents=True, exist_ok=True)
     if dest.exists():
         raise FileExistsError(f"Staging destination already exists: {dest}")

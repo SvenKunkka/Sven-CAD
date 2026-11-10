@@ -8,13 +8,14 @@ from pathlib import Path
 
 
 APP_ID = "local.personalcad.PersonalCAD"
+APP_NAME = "Sven CAD"
 FCSTD_ID = "org.freecad.fcstd"
 
 
 def personalize(info):
     info["CFBundleIdentifier"] = APP_ID
-    info["CFBundleName"] = "PersonalCAD"
-    info["CFBundleDisplayName"] = "个人 CAD"
+    info["CFBundleName"] = APP_NAME
+    info["CFBundleDisplayName"] = APP_NAME
     info["CFBundleDocumentTypes"] = [{
         "CFBundleTypeName": "FreeCAD Document",
         "CFBundleTypeRole": "Editor",

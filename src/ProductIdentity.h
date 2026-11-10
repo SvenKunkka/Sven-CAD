@@ -6,7 +6,7 @@ namespace ProductIdentity
 {
 #ifdef FREECAD_PERSONAL_CAD
 inline constexpr char executableName[] = "PersonalCAD";
-inline constexpr char displayName[] = "个人 CAD";
+inline constexpr char displayName[] = "Sven CAD";
 inline constexpr char desktopId[] = "local.personalcad.PersonalCAD";
 #else
 inline constexpr char executableName[] = "FreeCAD";

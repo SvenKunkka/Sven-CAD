@@ -238,6 +238,10 @@ App::DocumentObjectExecReturn* DrawViewPart::execute()
     }
 
     if (waitingForHlr()) {
+#ifdef FREECAD_PERSONAL_CAD
+        // Upstream drops this request, leaving the view on the geometry of the earlier change.
+        m_rerunAfterHlr = true;
+#endif
         return DrawView::execute();
     }
 
@@ -299,6 +303,9 @@ void DrawViewPart::partExec(TopoDS_Shape& shape)
 {
     if (waitingForHlr()) {
         //finish what we are already doing before starting a new cycle
+#ifdef FREECAD_PERSONAL_CAD
+        m_rerunAfterHlr = true;
+#endif
         return;
     }
 
@@ -446,6 +453,9 @@ void DrawViewPart::onHlrFinished()
             throw Base::RuntimeError("DVP::onHlrFinished - error extracting faces");
         }
     }
+#ifdef FREECAD_PERSONAL_CAD
+    rerunIfRequested();
+#endif
 }
 
 //! run any tasks that need to been done after geometry is available
@@ -816,7 +826,21 @@ void DrawViewPart::onFacesFinished()
     postFaceExtractionTasks();
 
     requestPaint();
+#ifdef FREECAD_PERSONAL_CAD
+    rerunIfRequested();
+#endif
 }
+
+#ifdef FREECAD_PERSONAL_CAD
+void DrawViewPart::rerunIfRequested()
+{
+    if (!m_rerunAfterHlr || waitingForHlr() || waitingForFaces() || nowUnsetting) {
+        return;
+    }
+    m_rerunAfterHlr = false;
+    recomputeFeature();
+}
+#endif
 
 void DrawViewPart::assignFaceRepresentations(const std::vector<TechDraw::FacePtr>& faces,
                                              const std::vector<TopoDS_Face>& occFaces)

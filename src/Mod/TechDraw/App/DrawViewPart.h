@@ -289,6 +289,11 @@ private:
     bool nowUnsetting;
     bool m_waitingForFaces;
     bool m_waitingForHlr;
+#ifdef FREECAD_PERSONAL_CAD
+    // A recompute arrived while hidden line removal was running; run again once it is done.
+    bool m_rerunAfterHlr = false;
+    void rerunIfRequested();
+#endif
 
     QMetaObject::Connection connectHlrWatcher;
     QFutureWatcher<void> m_hlrWatcher;

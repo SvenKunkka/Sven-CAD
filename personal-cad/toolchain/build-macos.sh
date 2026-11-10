@@ -52,20 +52,22 @@ if grep -Eq '^[+-U]' <<< "$submodules"; then
     fail "A submodule is missing or differs from its recorded commit."
 fi
 
-"$pixi" run "${pixi_args[@]}" --no-install -x bash -c '
+export PERSONAL_CAD_CONFIG_PRESET="$preset" PERSONAL_CAD_CONFIG_SOURCE="$source_dir"
+export PERSONAL_CAD_CONFIG_BUILD="$build_dir" PERSONAL_CAD_CONFIG_SDK="$sdk"
+"$pixi" run "${pixi_args[@]}" --no-install -x /bin/bash -c '
     set -euo pipefail
     export CXXFLAGS="${CXXFLAGS:-} -D_LIBCPP_DISABLE_AVAILABILITY"
-    cmake --preset "$1" -S "$2" -B "$3" \
+    cmake --preset "$PERSONAL_CAD_CONFIG_PRESET" -S "$PERSONAL_CAD_CONFIG_SOURCE" -B "$PERSONAL_CAD_CONFIG_BUILD" \
         -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 \
-        -DCMAKE_OSX_SYSROOT="$4" -DCONDA_BUILD_SYSROOT="$4" \
+        -DCMAKE_OSX_SYSROOT="$PERSONAL_CAD_CONFIG_SDK" -DCONDA_BUILD_SYSROOT="$PERSONAL_CAD_CONFIG_SDK" \
         -DFREECAD_3DCONNEXION_SUPPORT=None -DBUILD_DYNAMIC_LINK_PYTHON=OFF \
         -DFREECAD_QUICKLOOK_MODERN_SUPPORT=OFF -DFREECAD_QUICKLOOK_LEGACY_SUPPORT=OFF \
         -DCMAKE_INCLUDE_PATH="$CONDA_PREFIX/include" -DCMAKE_LIBRARY_PATH="$CONDA_PREFIX/lib" \
-        -DCMAKE_INSTALL_PREFIX="$3/stage" -DCMAKE_INSTALL_LIBDIR=lib \
+        -DCMAKE_INSTALL_PREFIX="$PERSONAL_CAD_CONFIG_BUILD/stage" -DCMAKE_INSTALL_LIBDIR=lib \
         -DRELATIVE_RPATH=ON -DINSTALL_TO_SITEPACKAGES=OFF \
         -DPython_EXECUTABLE="$CONDA_PREFIX/bin/python" \
         -DPython3_EXECUTABLE="$CONDA_PREFIX/bin/python"
-' bash "$preset" "$source_dir" "$build_dir" "$sdk"
+'
 [[ "$edition" != configure ]] || exit 0
 
 "$pixi" run "${pixi_args[@]}" --no-install cmake --build "$build_dir"

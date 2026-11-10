@@ -4751,11 +4751,8 @@ The preference system is the one set in the general preferences.</source>
     </message>
     <message>
       <location filename="../DocumentRecovery.ui" line="20"/>
-      <source>Press 'Start Recovery' to start the recovery process of the document listed below.
-
-The 'Status' column shows whether the document could be recovered.</source>
-      <translation>点击“开始恢复”按钮开始下列文件的恢复进程。
-'状态'列显示文档能否被恢复。</translation>
+      <source>Start Recovery opens the autosave snapshots listed below. Your saved files and backups are kept separately.</source>
+      <translation>点击“开始恢复”打开下方列出的自动保存记录。手动保存的文件和备份单独保留。</translation>
     </message>
     <message>
       <location filename="../DocumentRecovery.ui" line="49"/>
@@ -4771,6 +4768,10 @@ The 'Status' column shows whether the document could be recovered.</source>
       <location filename="../DocumentRecovery.ui" line="65"/>
       <source>Status</source>
       <translation>状态</translation>
+    </message>
+    <message>
+      <source>Autosaved at</source>
+      <translation>自动保存时间</translation>
     </message>
     <message>
       <location filename="../DocumentRecovery.cpp" line="187"/>
@@ -4807,6 +4808,10 @@ The 'Status' column shows whether the document could be recovered.</source>
       <location filename="../DocumentRecovery.cpp" line="361"/>
       <source>&amp;Finish</source>
       <translation>完成(&amp;F)</translation>
+    </message>
+    <message>
+      <source>Select Finish to review your recovered documents. To keep a separate copy, choose File &gt; Save As.</source>
+      <translation>点击“完成”检查恢复的文档。如需保留独立副本，请选择“文件”菜单中的“另存为”。</translation>
     </message>
     <message>
       <location filename="../DocumentRecovery.cpp" line="640"/>

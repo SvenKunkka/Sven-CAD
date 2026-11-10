@@ -1,0 +1,11 @@
+# Local build and QA outputs
+.build/
+__pycache__/
+runs/
+*.pyc
+*.log
+*.dmg
+*.app/
+.DS_Store
+.env
+.env.*

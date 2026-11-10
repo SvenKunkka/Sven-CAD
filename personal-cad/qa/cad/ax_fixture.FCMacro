@@ -1,0 +1,217 @@
+"""Drive deterministic mutations while a separate process reads native accessibility."""
+
+import json
+import os
+from pathlib import Path
+import sys
+from time import monotonic, time_ns
+import traceback
+
+import FreeCAD as App
+import FreeCADGui as Gui
+import Part
+from PySide import QtCore, QtWidgets
+
+sys.path.insert(0, os.environ["FREECAD_PERSONAL_QA_CODE"])
+from runtime_info import cocoa_plugin, qt_widgets
+
+
+class AxFixture:
+    sentinel = "AX Probe Sentinel"
+    root_label = "ax-model"
+
+    def __init__(self):
+        self.output = Path(os.environ["FREECAD_PERSONAL_QA_OUTPUT"])
+        self.scenario = os.environ["FREECAD_PERSONAL_QA_SCENARIO"]
+        self.select_root = self.scenario == "ax-model-tree-root"
+        self.expected_label = self.root_label if self.select_root else self.sentinel
+        self.deadline = monotonic() + int(os.environ["FREECAD_PERSONAL_QA_DURATION"])
+        self.doc = None
+        self.window = None
+        self.table = None
+        self.tree = None
+        self.mutations = 0
+        self.cocoa = None
+        self.widgets = None
+        self.timer = QtCore.QTimer()
+        self.timer.setInterval(750)
+        self.timer.timeout.connect(self.tick)
+
+    def write(self, name, value):
+        target = self.output / name
+        temporary = target.with_suffix(".tmp")
+        temporary.write_text(json.dumps(value, indent=2) + "\n")
+        temporary.replace(target)
+
+    def start(self):
+        try:
+            self.cocoa = cocoa_plugin()
+            self.widgets = qt_widgets()
+            if self.scenario == "ax-table":
+                self.window = QtWidgets.QWidget(Gui.getMainWindow(), QtCore.Qt.WindowType.Window)
+                self.window.setWindowTitle("AX Probe Table")
+                layout = QtWidgets.QVBoxLayout(self.window)
+                self.table = QtWidgets.QTableWidget(3, 1, self.window)
+                layout.addWidget(self.table)
+                self.table.setObjectName("PersonalCadAxProbeTable")
+                self.table.setAccessibleName("AX Probe Table")
+                self.table.setAccessibleIdentifier("PersonalCadAxProbeTable")
+                self.table.setHorizontalHeaderLabels(["Fixture part"])
+                self.table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows)
+                self.table.setSelectionMode(QtWidgets.QAbstractItemView.SelectionMode.SingleSelection)
+                for row, name in enumerate((self.sentinel, "Fixture adjacent A", "Fixture adjacent B")):
+                    self.table.setItem(row, 0, QtWidgets.QTableWidgetItem(name))
+                self.table.selectRow(0)
+                self.window.resize(480, 240)
+                self.window.show()
+                self.window.raise_()
+                self.window.activateWindow()
+            else:
+                Gui.activateWorkbench("PartWorkbench")
+                self.path = self.output / "ax-model.FCStd"
+                self.doc = App.newDocument("AXProbeDocument")
+                self.doc.UndoMode = 1
+                self.doc.addObject("Part::Box", "Sentinel").Label = self.sentinel
+                self.doc.recompute()
+                self.doc.saveAs(str(self.path))
+                self.select_model()
+            self.write("ready.json", {
+                "pid": os.getpid(),
+                "scenario": self.scenario,
+                "expected_label": self.expected_label,
+                "cocoa_plugin": self.cocoa,
+                "qt_widgets": self.widgets,
+                "internal_selection": self.selection(),
+                "tree_selection": self.tree_selection(),
+            })
+            self.timer.start()
+        except Exception:
+            self.finish(traceback.format_exc())
+
+    def select_model(self):
+        Gui.Selection.clearSelection()
+        Gui.Selection.addSelection(self.doc.Name, "Sentinel")
+        candidates = [
+            tree for tree in Gui.getMainWindow().findChildren(QtWidgets.QTreeWidget)
+            if tree.metaObject().className() == "Gui::TreeWidget"
+        ]
+        for tree in sorted(candidates, key=lambda widget: not widget.isVisible()):
+            items = tree.findItems(
+                self.sentinel, QtCore.Qt.MatchFlag.MatchExactly | QtCore.Qt.MatchFlag.MatchRecursive
+            )
+            if not items:
+                continue
+            self.tree = tree
+            tree.setAccessibleIdentifier("PersonalCadAxProbeModelTree")
+            if not tree.isVisible():
+                ancestor = tree.parentWidget()
+                while ancestor is not None and not isinstance(ancestor, QtWidgets.QDockWidget):
+                    ancestor = ancestor.parentWidget()
+                if ancestor is not None:
+                    ancestor.show()
+            tree.expandAll()
+            if self.select_root:
+                if tree.topLevelItemCount() != 1:
+                    raise RuntimeError("The fixture expected one top-level document")
+                item = tree.topLevelItem(0)
+            else:
+                item = items[0]
+            item.setData(0, QtCore.Qt.ItemDataRole.AccessibleTextRole, self.expected_label)
+            item.setData(0, QtCore.Qt.ItemDataRole.AccessibleDescriptionRole, self.expected_label)
+            select_row = (QtCore.QItemSelectionModel.SelectionFlag.ClearAndSelect
+                          | QtCore.QItemSelectionModel.SelectionFlag.Rows)
+            if self.select_root:
+                # FreeCAD's object selection cannot represent the document row.
+                Gui.Selection.clearSelection()
+                with QtCore.QSignalBlocker(tree.selectionModel()):
+                    tree.setCurrentItem(item, 0, select_row)
+            else:
+                tree.setCurrentItem(item, 0, select_row)
+            tree.scrollToItem(item)
+            break
+
+    def selection(self):
+        if self.table is not None:
+            return [item.text() for item in self.table.selectedItems()]
+        return [obj.Label for obj in Gui.Selection.getSelection()]
+
+    def tree_selection(self):
+        if self.tree is None:
+            return None
+        return [item.text(0) for item in self.tree.selectedItems()]
+
+    def tick(self):
+        try:
+            if (self.output / "stop").exists() or monotonic() >= self.deadline:
+                self.finish()
+                return
+            if not (self.output / "start-mutations").exists():
+                return
+            if self.table is not None:
+                if self.table.rowCount() == 3:
+                    self.table.setRowCount(2)
+                    action = "remove row"
+                else:
+                    self.table.setRowCount(3)
+                    self.table.setItem(2, 0, QtWidgets.QTableWidgetItem("Fixture adjacent B"))
+                    action = "insert row"
+            else:
+                if self.mutations % 8 == 7:
+                    App.closeDocument(self.doc.Name)
+                    self.doc = App.openDocument(str(self.path))
+                    self.doc.UndoMode = 1
+                    action = "reopen document"
+                else:
+                    self.doc.openTransaction("AX fixture edit")
+                    if self.doc.getObject("Adjacent") is None:
+                        adjacent = self.doc.addObject("Part::Box", "Adjacent")
+                        adjacent.Placement.Base = App.Vector(20, 0, 0)
+                        action = "insert object"
+                    else:
+                        self.doc.removeObject("Adjacent")
+                        action = "remove object"
+                    self.doc.recompute()
+                    self.doc.commitTransaction()
+                    if self.mutations % 4 == 3:
+                        self.doc.undo()
+                        self.doc.recompute()
+                        action += " and undo"
+                self.select_model()
+            self.mutations += 1
+            event = {
+                "unix_ms": time_ns() // 1_000_000,
+                "action": action,
+                "completed_mutations": self.mutations,
+                "internal_selection": self.selection(),
+                "tree_selection": self.tree_selection(),
+            }
+            self.write("mutations.json", event)
+            with (self.output / "mutations.jsonl").open("a") as journal:
+                journal.write(json.dumps(event) + "\n")
+        except Exception:
+            self.finish(traceback.format_exc())
+
+    def finish(self, error=None):
+        self.timer.stop()
+        if self.window is not None:
+            self.window.close()
+            self.window.deleteLater()
+        if self.doc is not None:
+            self.doc.recompute()
+            self.doc.save()
+            App.closeDocument(self.doc.Name)
+        status = "failed" if error or self.mutations == 0 else "passed"
+        self.write("report.json", {
+            "status": status,
+            "error": error or (None if self.mutations else "No mutations exercised"),
+            "pid": os.getpid(),
+            "scenario": self.scenario,
+            "completed_mutations": self.mutations,
+            "cocoa_plugin": self.cocoa,
+            "qt_widgets": self.widgets,
+        })
+        QtCore.QTimer.singleShot(500, lambda: Gui.runCommand("Std_Quit", 0))
+
+
+fixture = AxFixture()
+QtCore.QTimer.singleShot(150, fixture.start)

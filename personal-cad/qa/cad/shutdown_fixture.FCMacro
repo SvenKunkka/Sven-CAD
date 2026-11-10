@@ -1,0 +1,57 @@
+"""Exercise application shutdown with a visible FreeCAD notification."""
+
+import ctypes
+import json
+import os
+from pathlib import Path
+import sys
+from time import monotonic
+
+import FreeCAD as App
+import FreeCADGui as Gui
+from PySide import QtCore
+
+sys.path.insert(0, os.environ["FREECAD_PERSONAL_QA_CODE"])
+from runtime_info import cocoa_plugin, qt_widgets
+
+
+def run():
+    output = Path(os.environ["FREECAD_PERSONAL_QA_OUTPUT"])
+    direct = os.environ["FREECAD_PERSONAL_QA_SCENARIO"] == "shutdown-direct-qt"
+    preferences = App.ParamGet("User parameter:BaseApp/Preferences/NotificationArea")
+    preferences.SetBool("NonIntrusiveNotificationsEnabled", True)
+    preferences.SetBool("HideNonIntrusiveNotificationsWhenWindowDeactivated", False)
+    preferences.SetBool("PreventNonIntrusiveNotificationsWhenWindowNotActive", False)
+    preferences.SetInt("NotificationTime", 30)
+    App.Console.PrintNotification("Personal CAD QA shutdown fixture\n")
+    deadline = monotonic() + 5.0
+    # Call the application accessor without wrapping the tooltip in PySide.
+    # A Python QWidget wrapper would change the destruction path under test.
+    is_visible = ctypes.CDLL(None)._ZN3Gui15NotificationBox9isVisibleEv
+    is_visible.argtypes = []
+    is_visible.restype = ctypes.c_bool
+
+    def finish_when_visible():
+        visible = is_visible()
+        if not visible and monotonic() < deadline:
+            QtCore.QTimer.singleShot(50, finish_when_visible)
+            return
+        report = {
+            "status": "passed" if visible else "failed",
+            "error": None if visible else "FreeCAD notification never became visible",
+            "notification_visible_before_quit": visible,
+            "quit_path": "QCoreApplication.quit" if direct else "Std_Quit",
+            "pid": os.getpid(),
+            "cocoa_plugin": cocoa_plugin(),
+            "qt_widgets": qt_widgets(),
+        }
+        (output / "report.json").write_text(json.dumps(report, indent=2) + "\n")
+        if direct:
+            QtCore.QCoreApplication.quit()
+        else:
+            Gui.runCommand("Std_Quit", 0)
+
+    QtCore.QTimer.singleShot(50, finish_when_visible)
+
+
+QtCore.QTimer.singleShot(150, run)

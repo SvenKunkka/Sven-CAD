@@ -300,6 +300,10 @@ def run_macro():
     def execute():
         document = None
         try:
+            home = Path(os.environ["FREECAD_USER_HOME"]).resolve()
+            for key in ("UserParameter", "SystemParameter", "UserAppData", "AppTempPath"):
+                path = Path(App.ConfigGet(key)).resolve()
+                require(path.is_relative_to(home), f"Profile is not isolated: {key}={path}")
             settings = App.ParamGet("User parameter:BaseApp/Preferences/View")
 
             def navigation_preferences():
@@ -365,8 +369,6 @@ def main():
     parser.add_argument("--timeout", type=int, default=90)
     args = parser.parse_args()
     app = args.app.resolve()
-    if app.is_relative_to("/Applications") or app.is_relative_to(Path.home() / "Applications"):
-        parser.error("Use an isolated build artifact, not an installed app")
     output = args.output.resolve()
     output.mkdir(parents=True)
     info = plistlib.loads((app / "Contents/Info.plist").read_bytes())

@@ -1,0 +1,194 @@
+"""Run from the GUI executable using run_fixtures.py."""
+
+import hashlib
+import json
+import os
+from pathlib import Path
+import sys
+import traceback
+
+import FreeCAD as App
+import FreeCADGui as Gui
+import ImportGui
+from PySide import QtCore, QtWidgets
+
+sys.path.insert(0, os.environ["FREECAD_PERSONAL_QA_CODE"])
+from models import (
+    assembly_drawing_metrics,
+    color_counts,
+    export_assembly_pdf,
+    make_assembly,
+    make_assembly_drawing,
+    make_drawing,
+    make_housing,
+    make_legacy,
+    placement,
+    require,
+    same_shape_metrics,
+    shape_metrics,
+)
+from runtime_info import cocoa_plugin, freecad_app, qt_widgets
+
+
+def file_metrics(path):
+    data = path.read_bytes()
+    require(bool(data), f"Empty artifact: {path.name}")
+    return {"bytes": len(data), "sha256": hashlib.sha256(data).hexdigest()}
+
+
+def document_metrics(doc):
+    return {
+        "objects": {obj.Name: obj.TypeId for obj in doc.Objects},
+        "constraints": {
+            obj.Name: obj.ConstraintCount
+            for obj in doc.Objects
+            if obj.TypeId == "Sketcher::SketchObject"
+        },
+        "external_links": {
+            obj.Name: [Path(obj.LinkedObject.Document.FileName).name, obj.LinkedObject.Name]
+            for obj in doc.Objects
+            if obj.TypeId == "App::Link"
+            and obj.LinkedObject
+            and obj.LinkedObject.Document != doc
+        },
+    }
+
+
+def test_step(body, output):
+    doc = App.newDocument("StepExport")
+    group = doc.addObject("App::Part", "KeyboardModel")
+    sample = group.newObject("Part::Feature", "HousingStep")
+    sample.Shape = body.Shape.copy()
+    doc.recompute()
+    colors = [(0.0, 1.0, 0.0), (0.0, 0.0, 1.0)]
+    sample.ViewObject.DiffuseColor = [colors[index % 2] for index in range(len(sample.Shape.Faces))]
+    expected_colors = color_counts(sample)
+    require(len(expected_colors) == 2, "Export sample lost per-face colors")
+    step = output / "keyboard-colored.step"
+    ImportGui.export([group], str(step))
+
+    target = App.newDocument("StepRoundtrip")
+    ImportGui.insert(name=str(step), docName=target.Name, merge=False, useLinkGroup=True)
+    target.recompute()
+    features = [obj for obj in target.Objects if obj.isDerivedFrom("Part::Feature")]
+    require(len(features) == 1, "STEP roundtrip should contain one part feature")
+    actual_shape = shape_metrics(features[0].Shape)
+    actual_colors = color_counts(features[0])
+    require(same_shape_metrics(shape_metrics(body.Shape), actual_shape), "STEP changed housing geometry")
+    require(actual_colors == expected_colors, "STEP changed the per-face color distribution")
+    target.saveAs(str(output / "keyboard-step-roundtrip.FCStd"))
+    App.closeDocument(target.Name)
+    App.closeDocument(doc.Name)
+    return {"shape": actual_shape, "face_colors": [list(key) + [count] for key, count in sorted(actual_colors.items())]}
+
+
+def reopen(path, original, linked=None):
+    before = document_metrics(original)
+    App.closeDocument(original.Name)
+    if linked is not None:
+        App.closeDocument(linked.Name)
+    result = App.openDocument(str(path))
+    result.recompute()
+    after = document_metrics(result)
+    require(after == before, f"{path.name} changed its object, constraint, or link set")
+    return result, after
+
+
+def generate(output, include_legacy, results, *, include_assembly_drawing=False):
+    doc, body, before, after = make_housing()
+    results["housing"] = {"before_parameter_edit": before, "after_parameter_edit": after}
+    results["step_roundtrip"] = test_step(body, output)
+    results["drawing"] = make_drawing(doc, body, output)
+    require((output / "keyboard-drawing.pdf").read_bytes().startswith(b"%PDF-"), "Invalid PDF output")
+    require(b"<svg" in (output / "keyboard-drawing.svg").read_bytes(), "Invalid SVG output")
+    require(b"ENTITIES" in (output / "keyboard-drawing.dxf").read_bytes(), "Invalid DXF output")
+    housing_path = output / "keyboard-housing.FCStd"
+    doc.recompute()
+    doc.saveAs(str(housing_path))
+    doc, metadata = reopen(housing_path, doc)
+    require(same_shape_metrics(after, shape_metrics(doc.Housing.Shape)), "Reopening changed housing geometry")
+    results["housing"]["reopened"] = metadata
+
+    path = output / "keyboard-assembly.FCStd"
+    assembly = make_assembly(doc.Housing, path)
+    solved = assembly.LidLink.Placement
+    if include_assembly_drawing:
+        drawing_before = make_assembly_drawing(assembly)
+    assembly.save()
+    assembly, metadata = reopen(path, assembly, doc)
+    require(assembly.LidLink.Placement.isSame(solved, 1e-6), "Reopening changed assembly placement")
+    require(assembly.Assembly.solve() == 0, "Reopened static assembly does not solve")
+    results["assembly"] = {
+        "ground_placement": placement(assembly.HousingLink.Placement),
+        "lid_placement": placement(assembly.LidLink.Placement),
+        "joint_type": assembly.FixedLid.JointType,
+        "reopened": metadata,
+    }
+    if include_assembly_drawing:
+        drawing_after = assembly_drawing_metrics(assembly)
+        require(drawing_after == drawing_before, "Reopening changed the assembly drawing")
+        export_assembly_pdf(assembly, output)
+        results["assembly_drawing"] = {**drawing_after, "reopened": True, "pdf": "keyboard-assembly-drawing.pdf"}
+    reopened_housing = assembly.HousingLink.LinkedObject.Document.Name
+    App.closeDocument(assembly.Name)
+    App.closeDocument(reopened_housing)
+
+    if include_legacy:
+        legacy, link_source = make_legacy(output)
+        path = output / "legacy-mixed.FCStd"
+        legacy.save()
+        legacy, metadata = reopen(path, legacy, link_source)
+        results["legacy"] = {
+            "required_modules": ["Spreadsheet", "Mesh"],
+            "reopened": metadata,
+            "source_length_mm": legacy.ParametricLegacyBox.Length.Value,
+        }
+        reopened_link_source = legacy.ExternalBlock.LinkedObject.Document.Name
+        App.closeDocument(legacy.Name)
+        App.closeDocument(reopened_link_source)
+
+
+def run():
+    output = Path(os.environ["FREECAD_PERSONAL_QA_OUTPUT"])
+    report = {"status": "failed", "freecad_version": list(App.Version()), "fixtures": {}}
+    existing = set(App.listDocuments())
+    try:
+        report["cocoa_plugin"] = cocoa_plugin()
+        report["qt_widgets"] = qt_widgets()
+        report["freecad_app"] = freecad_app()
+        App.ParamGet("User parameter:BaseApp/Preferences/Document").SetBool("CreateBackupFiles", False)
+        baseline = os.environ["FREECAD_PERSONAL_QA_MODE"] == "baseline"
+        generate(output, baseline, report["fixtures"], include_assembly_drawing=not baseline)
+        if not baseline:
+            from personal_checks import (
+                check_bom, check_configuration, check_disabled_mesh, check_legacy,
+                check_material_migration, check_missing_link,
+            )
+
+            personal = report["personal"] = {}
+            personal["configuration"] = check_configuration()
+            personal["bom"] = check_bom(output)
+            personal["mesh_disabled"] = check_disabled_mesh(output)
+            legacy_source = Path(os.environ["FREECAD_PERSONAL_QA_LEGACY_SOURCE"])
+            personal["legacy_rejection"] = check_legacy(legacy_source, output, file_metrics)
+            personal["material_migration"] = check_material_migration(legacy_source, output, file_metrics)
+            personal["missing_link"] = check_missing_link(legacy_source, output, file_metrics)
+        report["status"] = "passed"
+    except Exception:
+        report["error"] = traceback.format_exc()
+    finally:
+        report["artifacts"] = {
+            path.name: file_metrics(path)
+            for path in sorted(output.iterdir())
+            if path.is_file() and path.suffix.lower() in {".fcstd", ".step", ".pdf", ".svg", ".dxf", ".csv"}
+        }
+        (output / "report.json").write_text(json.dumps(report, indent=2) + "\n")
+        for name in reversed(list(App.listDocuments())):
+            if name not in existing:
+                App.closeDocument(name)
+        # Let normal GUI events dispose closed views before asking the application to quit.
+        QtCore.QTimer.singleShot(500, lambda: Gui.runCommand("Std_Quit", 0))
+
+
+if __name__ != "soak_fixtures":
+    QtCore.QTimer.singleShot(150, run)

@@ -259,11 +259,20 @@ def _add_edges(view, lines):
 
 
 def _remove_edges(view, tags):
-    for tag in tags:
+    _replace_edges(view, tags, [])
+
+
+def _replace_edges(view, old_tags, lines):
+    """Swap a callout's cosmetic edges in one change, so the view redraws once and keeps no stale lines."""
+    if hasattr(view, "replaceCosmeticEdges"):
+        items = [tuple(float(v) if isinstance(v, float) else v for v in line) for line in lines]
+        return [t for t in view.replaceCosmeticEdges(list(old_tags), items) if t]
+    for tag in old_tags:
         try:
             view.removeCosmeticEdge(tag)
         except Exception:
             pass
+    return _add_edges(view, lines)
 
 
 def _signature(*parts):
@@ -341,8 +350,7 @@ class ThreadCallout:
             obj.X = text_pos.x
             obj.Y = text_pos.y
         if signature != obj.Signature or not all(_has_edge(view, t) for t in obj.CosmeticTags):
-            _remove_edges(view, obj.CosmeticTags)
-            obj.CosmeticTags = _add_edges(view, lines)
+            obj.CosmeticTags = _replace_edges(view, obj.CosmeticTags, lines)
             obj.Signature = signature
             # Cosmetic edges are drawn without another hidden line pass of the view.
             view.purgeTouched()

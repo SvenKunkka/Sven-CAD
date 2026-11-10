@@ -265,6 +265,14 @@ class DrawViewPart(DrawView):
         """point3d = getOriginalCentroid() - returns the centre used by the last projection of this view."""
         ...
 
+    def replaceCosmeticEdges(self, remove: list[str], add: list[tuple], /) -> list[str]:
+        """tags = replaceCosmeticEdges(removeTags, items) - remove and add cosmetic edges in one change.
+
+        Each item is ("view", p1, p2, style, weight) in view coordinates, ("line", p1, p2, style, weight)
+        or ("arc", centre, radius, angle1, angle2, style, weight) in 3D. Returns one tag per item, empty
+        for a line whose projected ends coincide."""
+        ...
+
     def waitingForResult(self) -> bool:
         """waitingForResult(). True while hidden line removal or face finding still runs."""
         ...

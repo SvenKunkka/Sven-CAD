@@ -23,6 +23,7 @@
  ***************************************************************************/
 
 
+# include <set>
 # include <BRepBuilderAPI_MakeVertex.hxx>
 # include <gp_Pnt.hxx>
 # include <TopoDS.hxx>
@@ -182,6 +183,131 @@ PyObject* DrawViewPartPy::getOriginalCentroid(PyObject *args)
         return nullptr;
     }
     return new Base::VectorPy(new Base::Vector3d(getDrawViewPartPtr()->getOriginalCentroid()));
+}
+
+PyObject* DrawViewPartPy::replaceCosmeticEdges(PyObject *args)
+{
+    PyObject* pRemove = nullptr;
+    PyObject* pAdd = nullptr;
+    if (!PyArg_ParseTuple(args, "O!O!", &PyList_Type, &pRemove, &PyList_Type, &pAdd)) {
+        return nullptr;
+    }
+    DrawViewPart* dvp = getDrawViewPartPtr();
+    if (!dvp->hasGeometry()) {
+        PyErr_SetString(PyExc_RuntimeError, "The view has no geometry yet.");
+        return nullptr;
+    }
+
+    std::set<std::string> removeTags;
+    for (Py_ssize_t i = 0; i < PyList_Size(pRemove); ++i) {
+        PyObject* item = PyList_GetItem(pRemove, i);
+        if (!PyUnicode_Check(item)) {
+            PyErr_SetString(PyExc_TypeError, "Tags to remove must be strings.");
+            return nullptr;
+        }
+        removeTags.insert(PyUnicode_AsUTF8(item));
+    }
+
+    auto vector = [](PyObject* obj, Base::Vector3d& out) {
+        if (!PyObject_TypeCheck(obj, &Base::VectorPy::Type)) {
+            return false;
+        }
+        out = static_cast<Base::VectorPy*>(obj)->value();
+        return true;
+    };
+
+    const Base::Vector3d centroid = dvp->getOriginalCentroid();
+    std::vector<CosmeticEdge*> created;
+    std::vector<std::string> tags;
+    auto fail = [&created](const char* message) -> PyObject* {
+        for (auto* ce : created) {
+            delete ce;
+        }
+        PyErr_SetString(PyExc_ValueError, message);
+        return nullptr;
+    };
+    for (Py_ssize_t i = 0; i < PyList_Size(pAdd); ++i) {
+        PyObject* item = PyList_GetItem(pAdd, i);
+        if (!PyTuple_Check(item) || PyTuple_Size(item) < 5 || !PyUnicode_Check(PyTuple_GetItem(item, 0))) {
+            return fail("Each cosmetic edge is a tuple starting with \"view\", \"line\" or \"arc\".");
+        }
+        const std::string kind = PyUnicode_AsUTF8(PyTuple_GetItem(item, 0));
+        const Py_ssize_t n = PyTuple_Size(item);
+        CosmeticEdge* ce = nullptr;
+        int style = 0;
+        double weight = 0.0;
+        if ((kind == "view" || kind == "line") && n == 5) {
+            Base::Vector3d p1;
+            Base::Vector3d p2;
+            if (!vector(PyTuple_GetItem(item, 1), p1) || !vector(PyTuple_GetItem(item, 2), p2)) {
+                return fail("Line ends must be vectors.");
+            }
+            if (kind == "view") {
+                p1 = DU::invertY(p1);
+                p2 = DU::invertY(p2);
+            }
+            else {
+                p1 = dvp->projectPoint(p1 - centroid);
+                p2 = dvp->projectPoint(p2 - centroid);
+            }
+            if (p1.IsEqual(p2, Precision::Confusion())) {
+                tags.emplace_back();
+                continue;
+            }
+            ce = new CosmeticEdge(p1, p2);
+            style = static_cast<int>(PyLong_AsLong(PyTuple_GetItem(item, 3)));
+            weight = PyFloat_AsDouble(PyTuple_GetItem(item, 4));
+        }
+        else if (kind == "arc" && n == 7) {
+            Base::Vector3d center;
+            if (!vector(PyTuple_GetItem(item, 1), center)) {
+                return fail("The arc centre must be a vector.");
+            }
+            const double radius = PyFloat_AsDouble(PyTuple_GetItem(item, 2));
+            const double angle1 = PyFloat_AsDouble(PyTuple_GetItem(item, 3));
+            const double angle2 = PyFloat_AsDouble(PyTuple_GetItem(item, 4));
+            center = DrawUtil::invertY(dvp->projectPoint(center - centroid));
+            TechDraw::BaseGeomPtr bg = std::make_shared<TechDraw::AOC>(center, radius, angle1, angle2);
+            ce = new CosmeticEdge(bg->inverted());
+            ce->permaRadius = radius;
+            style = static_cast<int>(PyLong_AsLong(PyTuple_GetItem(item, 5)));
+            weight = PyFloat_AsDouble(PyTuple_GetItem(item, 6));
+        }
+        else {
+            return fail("Unknown cosmetic edge kind or wrong number of values.");
+        }
+        if (PyErr_Occurred()) {
+            delete ce;
+            for (auto* c : created) {
+                delete c;
+            }
+            return nullptr;
+        }
+        ce->m_format.setStyle(style);
+        ce->m_format.setWidth(weight);
+        ce->m_format.setColor(LineFormat::getDefEdgeColor());
+        ce->m_format.setLineNumber(1);
+        created.push_back(ce);
+        tags.push_back(ce->getTagAsString());
+    }
+
+    // One property change and one display refresh for the whole batch.
+    std::vector<CosmeticEdge*> edges;
+    for (auto* ce : dvp->CosmeticEdges.getValues()) {
+        if (!removeTags.count(ce->getTagAsString())) {
+            edges.push_back(ce);
+        }
+    }
+    edges.insert(edges.end(), created.begin(), created.end());
+    dvp->CosmeticEdges.setValues(edges);
+    dvp->refreshCEGeoms();
+    dvp->requestPaint();
+
+    Py::List result;
+    for (const auto& tag : tags) {
+        result.append(Py::String(tag));
+    }
+    return Py::new_reference_to(result);
 }
 
 PyObject* DrawViewPartPy::waitingForResult(PyObject *args)

@@ -97,6 +97,7 @@ def runtime_files(personal):
             or path.suffix in {".o", ".a", ".pyc"}
             or path.name.startswith("libLTO.")
             or "menuinst" in path.parts
+            or (personal and path.parts[2:5] == ("site-packages", "tornado", "test"))
         ):
             continue
         if path.parent.name == "PySide6" and path.name.startswith("Qt") and path.suffix == ".so":

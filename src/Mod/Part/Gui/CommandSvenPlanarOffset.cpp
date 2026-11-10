@@ -244,7 +244,7 @@ protected:
 
     void activated(int) override
     {
-        auto selection = Gui::Selection().getSelectionT(nullptr, Gui::ResolveMode::NoResolve, true);
+        auto selection = Gui::Selection().getSelectionT(nullptr, Gui::ResolveMode::NoResolve);
         const App::SubObjectT* selectedFace = nullptr;
         SvenPlanarOffset* existing = nullptr;
         if (selection.size() <= 2) {
@@ -252,7 +252,7 @@ protected:
                 if (selectedSource(entry)) {
                     selectedFace = &entry;
                 }
-                else if (!*entry.getElementName()) {
+                else if (!entry.hasSubElement()) {
                     existing = freecad_cast<SvenPlanarOffset*>(entry.getSubObject());
                 }
             }
@@ -452,6 +452,7 @@ private:
             }
             copyAppearance(*source, *result, face.c_str(), *sourceView, *resultView);
             sourceView->hide();
+            resultView->show();
             transaction.close();
         }
         catch (...) {

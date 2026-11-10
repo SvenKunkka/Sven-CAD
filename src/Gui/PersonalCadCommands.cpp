@@ -239,7 +239,7 @@ protected:
                 return;
             }
         }
-        const auto references = getSelection().getSelectionT(nullptr, ResolveMode::NoResolve, true);
+        const auto references = getSelection().getSelectionT(nullptr, ResolveMode::NoResolve);
         if (references.size() == 2
             && std::ranges::any_of(references, [](const App::SubObjectT& reference) {
                 return isObjectType(reference.getSubObject(), "Part::SvenPlanarOffset");

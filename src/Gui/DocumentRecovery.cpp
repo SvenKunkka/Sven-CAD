@@ -44,8 +44,11 @@
 #include <QTreeWidgetItem>
 #include <QXmlStreamReader>
 #include <QVector>
+#include <array>
+#include <cstdint>
 #include <memory>
 #include <sstream>
+#include <zlib.h>
 
 #include <FCConfig.h>
 
@@ -69,6 +72,8 @@ FC_LOG_LEVEL_INIT("Gui", true, true)
 using namespace Gui;
 using namespace Gui::Dialog;
 namespace sp = std::placeholders;
+
+static bool zipDataIsValid(const QString& fcstdFile, bool verifyContents = false);
 
 // taken from the script doctools.py
 std::string DocumentRecovery::doctools
@@ -270,11 +275,15 @@ void DocumentRecovery::accept()
                     file = createProjectFile(info.projectFile);
                 }
 
-                paths.emplace_back(file.toUtf8().constData());
-                filenames.emplace_back(info.fileName.toUtf8().constData());
-                labels.emplace_back(info.label.toUtf8().constData());
-                indices.push_back(index);
-                ++index;
+                if (!zipDataIsValid(file, true)) {
+                    errorInfo = tr("The autosave archive is damaged or incomplete.");
+                }
+                else {
+                    paths.emplace_back(file.toUtf8().constData());
+                    filenames.emplace_back(info.fileName.toUtf8().constData());
+                    labels.emplace_back(info.label.toUtf8().constData());
+                    indices.push_back(index);
+                }
             }
             catch (const std::exception& e) {
                 errorInfo = QString::fromLatin1(e.what());
@@ -295,6 +304,7 @@ void DocumentRecovery::accept()
                 }
                 d->writeRecoveryInfo(info);
             }
+            ++index;
         }
 
         auto docs = App::GetApplication().openDocuments(filenames, &paths, &labels, &errs);
@@ -492,25 +502,36 @@ DocumentRecoveryPrivate::Info DocumentRecoveryPrivate::getRecoveryInfo(const QFi
 }
 
 
-/// Rough check to see if the ZIP data is valid. No CRC calculation, just a fast iteration over the
-/// contents to see if it seems basically OK.
-bool zipDataIsValid(const QString& fcstdFile)
+/// Inspect the ZIP structure and optionally verify each entry's contents before recovery.
+static bool zipDataIsValid(const QString& fcstdFile, bool verifyContents)
 {
     try {
         zipios::ZipFile zf(fcstdFile.toStdString());
         auto entries = zf.entries();
-        int n = 0;
-        for (auto it = entries.begin(); it != entries.end(); ++it) {
-            std::unique_ptr<std::istream> s(zf.getInputStream(*it));
-            if (!s || !(*s)) {
+        std::array<Bytef, 64 * 1024> buffer;
+        for (const auto& entry : entries) {
+            std::unique_ptr<std::istream> stream(zf.getInputStream(entry));
+            if (!stream || !*stream) {
                 return false;
             }
-            ++n;
+            if (verifyContents) {
+                uLong checksum = crc32(0, Z_NULL, 0);
+                std::uint64_t size = 0;
+                while (*stream) {
+                    stream->read(reinterpret_cast<char*>(buffer.data()), buffer.size());
+                    const auto count = stream->gcount();
+                    size += static_cast<std::uint64_t>(count);
+                    if (size > entry->getSize()) {
+                        return false;
+                    }
+                    checksum = crc32(checksum, buffer.data(), static_cast<uInt>(count));
+                }
+                if (stream->bad() || size != entry->getSize() || checksum != entry->getCrc()) {
+                    return false;
+                }
+            }
         }
-        if (n == 0) {
-            return false;
-        }
-        return true;
+        return !entries.empty() && (!verifyContents || zf.getEntry("Document.xml"));
     }
     catch (...) {
         return false;

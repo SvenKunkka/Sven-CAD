@@ -4800,6 +4800,10 @@ The preference system is the one set in the general preferences.</source>
       <translation>无法恢复</translation>
     </message>
     <message>
+      <source>The autosave archive is damaged or incomplete.</source>
+      <translation>自动保存文件已损坏或不完整。</translation>
+    </message>
+    <message>
       <location filename="../DocumentRecovery.cpp" line="322"/>
       <source>Successfully recovered</source>
       <translation>成功恢复</translation>

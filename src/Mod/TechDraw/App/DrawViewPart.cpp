@@ -65,6 +65,9 @@
 #include <gp_Pln.hxx>
 #include <gp_Pnt.hxx>
 #include <sstream>
+#include <chrono>
+#include <cstdio>
+#include <cstdlib>
 
 
 #include <App/Document.h>
@@ -97,6 +100,19 @@
 #include "ShapeUtils.h"
 
 using namespace TechDraw;
+
+#ifdef FREECAD_PERSONAL_CAD
+static void traceHlr(const char* name, const char* what)
+{
+    // Diagnostics for the QA runs: SVEN_CAD_TRACE_HLR=1 prints each hidden line removal event.
+    static const bool on = std::getenv("SVEN_CAD_TRACE_HLR") != nullptr;
+    if (on) {
+        std::fprintf(stderr, "SVEN_HLR %.3f %s %s\n",
+                     std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count(),
+                     name ? name : "?", what);
+    }
+}
+#endif
 using DU = DrawUtil;
 
 PROPERTY_SOURCE_WITH_EXTENSIONS(TechDraw::DrawViewPart, TechDraw::DrawView)
@@ -241,6 +257,7 @@ App::DocumentObjectExecReturn* DrawViewPart::execute()
 #ifdef FREECAD_PERSONAL_CAD
         // Upstream drops this request, leaving the view on the geometry of the earlier change.
         m_rerunAfterHlr = true;
+        traceHlr(getNameInDocument(), "execute-while-busy");
 #endif
         return DrawView::execute();
     }
@@ -393,6 +410,9 @@ TechDraw::GeometryObjectPtr DrawViewPart::buildGeometryObject(const TopoDS_Shape
     m_hlrFuture = QtConcurrent::run(std::move(lambda));
     m_hlrWatcher.setFuture(m_hlrFuture);
     waitingForHlr(true);
+#ifdef FREECAD_PERSONAL_CAD
+    traceHlr(getNameInDocument(), "hlr-start");
+#endif
 
     return go;
 }
@@ -418,6 +438,9 @@ void DrawViewPart::onHlrFinished()
     bbox = geometryObject->calcBoundingBox();
 
     waitingForHlr(false);
+#ifdef FREECAD_PERSONAL_CAD
+    traceHlr(getNameInDocument(), "hlr-end");
+#endif
     QObject::disconnect(connectHlrWatcher);
     showProgressMessage(getNameInDocument(), "has finished finding hidden lines");
 
@@ -838,6 +861,7 @@ void DrawViewPart::rerunIfRequested()
         return;
     }
     m_rerunAfterHlr = false;
+    traceHlr(getNameInDocument(), "rerun");
     recomputeFeature();
 }
 #endif

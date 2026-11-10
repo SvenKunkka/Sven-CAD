@@ -458,6 +458,8 @@ def main():
             "FREECAD_USER_TEMP": str(profile / "tmp"), "PYTHONDONTWRITEBYTECODE": "1",
             OUTPUT_ENV: str(output), CONFIG_ENV: json.dumps(config),
         }
+        if os.environ.get("SVEN_CAD_TRACE_HLR"):
+            env["SVEN_CAD_TRACE_HLR"] = "1"
         holder, stop, samples = {}, threading.Event(), []
         sampler = threading.Thread(target=sample_rss, args=(holder, stop, samples), daemon=True)
         sampler.start()

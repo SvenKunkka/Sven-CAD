@@ -176,6 +176,14 @@ PyObject* DrawViewPartPy::requestPaint(PyObject *args)
     Py_Return;
 }
 
+PyObject* DrawViewPartPy::getOriginalCentroid(PyObject *args)
+{
+    if (!PyArg_ParseTuple(args, "")) {
+        return nullptr;
+    }
+    return new Base::VectorPy(new Base::Vector3d(getDrawViewPartPtr()->getOriginalCentroid()));
+}
+
 PyObject* DrawViewPartPy::waitingForResult(PyObject *args)
 {
     if (!PyArg_ParseTuple(args, "")) {

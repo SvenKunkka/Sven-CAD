@@ -158,9 +158,16 @@ def view_threads(view):
 
 # ---------------------------------------------------------------- view geometry
 
+def view_center(view):
+    """The centre TechDraw used for the current projection, so cosmetic edges and callouts agree."""
+    if hasattr(view, "getOriginalCentroid"):
+        return view.getOriginalCentroid()
+    return view.getGeometricCenter()
+
+
 def _to_view(view, point, center=None):
     """Unscaled view coordinates, Y up, of a global point."""
-    return view.projectPoint(point - (view.getGeometricCenter() if center is None else center))
+    return view.projectPoint(point - (view_center(view) if center is None else center))
 
 
 def _to_page(view, point, center=None):
@@ -288,7 +295,7 @@ class ThreadCallout:
     def execute(self, obj):
         view = obj.SourceView
         spec = self.spec(obj)
-        anchor = _to_page(view, spec["start"], view.getGeometricCenter())
+        anchor = _to_page(view, spec["start"], view_center(view))
         text_pos = anchor + obj.TextOffset
         width = 0.62 * obj.TextSize.Value * len(spec["text"])
         near = text_pos.x - width / 2 if obj.TextOffset.x >= 0 else text_pos.x + width / 2
@@ -399,6 +406,8 @@ def make_bom(assembly):
     bom = group.newObject("Assembly::BomObject", "SvenBom")
     bom.Label = "BOM"
     bom.columnsNames = [c for c, _ in BOM_COLUMNS]
+    # A part container is one BOM line; its bodies and thread features are not separate parts.
+    bom.detailParts = False
     bom.recompute()
     return bom
 

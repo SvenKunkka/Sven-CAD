@@ -261,6 +261,10 @@ class DrawViewPart(DrawView):
         """requestPaint(). Redraw the graphic for this View."""
         ...
 
+    def getOriginalCentroid(self) -> Any:
+        """point3d = getOriginalCentroid() - returns the centre used by the last projection of this view."""
+        ...
+
     def waitingForResult(self) -> bool:
         """waitingForResult(). True while hidden line removal or face finding still runs."""
         ...

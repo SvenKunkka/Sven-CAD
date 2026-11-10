@@ -317,6 +317,13 @@ Gui::MDIView *ViewProviderDrawingView::getMDIView() const
 
 void ViewProviderDrawingView::onGuiRepaint(const TechDraw::DrawView* dv)
 {
+#ifdef FREECAD_PERSONAL_CAD
+    // Every view provider hears every view's paint request. Only the requesting view repaints,
+    // so skip the page search for the others; with hundreds of annotations it dominated.
+    if (dv != getViewObject()) {
+        return;
+    }
+#endif
     Gui::Document* guiDoc = Gui::Application::Instance->getDocument(getViewObject()->getDocument());
     if (!guiDoc) {
         return;

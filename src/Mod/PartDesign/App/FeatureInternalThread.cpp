@@ -130,7 +130,10 @@ Part::TopoShape InternalThread::makeShape(const HoleWall& bore, int size, double
     const Part::TopoShape existingBore(BRepPrimAPI_MakeCylinder(bore.radius, effectiveLength).Shape());
     const auto cutMaterial = groove.makeElementCut(existingBore);
     const double expected = volume(cutMaterial.getShape());
-    const double tolerance = std::max(expected * 1e-6, 1e-6);
+    // Boolean volumes of the swept groove differ by up to about 5e-6 of the groove volume when
+    // the groove is placed from the far end of the face. A groove that opens a thin wall loses
+    // over 1e-2, so 1e-4 separates numerical noise from a real breakthrough.
+    const double tolerance = std::max(expected * 1e-4, 1e-5);
 
     auto start = bore.start.Location();
     auto direction = bore.start.Direction();

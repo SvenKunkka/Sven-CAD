@@ -565,6 +565,9 @@ Hole::Hole()
 
     ADD_PROPERTY_TYPE(CosmeticThread, (true), "Hole", App::Prop_None, "Texture the thread");
 #ifdef FREECAD_PERSONAL_CAD
+    ADD_PROPERTY_TYPE(ThreadPitch, (0.0), "Manufacturing",
+                      static_cast<App::PropertyType>(App::Prop_ReadOnly | App::Prop_Output),
+                      "Nominal pitch of the selected thread profile");
     ADD_PROPERTY_TYPE(ManufacturingLimits, (""), "Manufacturing",
                       static_cast<App::PropertyType>(App::Prop_ReadOnly | App::Prop_Output),
                       "Reference diameter limits and normal engagement length");
@@ -1258,6 +1261,9 @@ void Hole::updateDiameterParam()
     if (threadType > 0 && threadSize > 0) {
         ThreadDiameter.setValue(threadDescription[threadType][threadSize].diameter);
     }
+#ifdef FREECAD_PERSONAL_CAD
+    ThreadPitch.setValueIfChanged(threadType > 0 && threadSize >= 0 ? getThreadPitch() : 0.0);
+#endif
     if (auto opt = determineDiameter()) {
         Diameter.setValue(opt.value());
     }

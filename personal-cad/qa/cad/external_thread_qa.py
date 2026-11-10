@@ -2,6 +2,7 @@
 
 import argparse
 import hashlib
+from itertools import product
 import json
 import math
 import os
@@ -261,7 +262,7 @@ def run_macro():
         for spec, diameter, pitch in SIZES:
             drill, d1, d2 = INTERNAL_RANGES[spec]
             engagement = EXTERNAL_RANGES[spec][-1]
-            for through, handedness in ((False, "Right"), (True, "Left")):
+            for through, handedness in product((False, True), ("Right", "Left")):
                 doc = App.newDocument("InternalThreadQA")
                 body, sketch = make_hole_profile(doc)
                 hole = body.newObject("PartDesign::Hole", "Hole")
@@ -307,7 +308,7 @@ def run_macro():
                 if not through:
                     assert math.isclose(hole.ThreadDepth.Value, 4 * pitch, abs_tol=1e-9)
                     assert shape.isInside(center + App.Vector(radius, 0, 1.25), 1e-7, True)
-                if spec == "M3x0.5":
+                if spec == "M3x0.5" and through == (handedness == "Left"):
                     path = output / ("internal-through.FCStd" if through else "internal-blind.FCStd")
                     doc.saveAs(str(path))
                     App.closeDocument(doc.Name)

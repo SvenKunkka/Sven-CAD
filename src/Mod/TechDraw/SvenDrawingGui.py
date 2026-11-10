@@ -24,6 +24,7 @@ ZH = {
     "Add the parts to one assembly, or select the assembly to list.": "请把零件放进一个装配，或选中要列出的装配。",
     "Drawing exported": "图纸已导出",
     "Export failed": "导出失败",
+    "Open the drawing page before exporting it.": "请先打开图纸页再导出。",
     "The views are still being computed. Try again in a moment.": "视图仍在计算，请稍后再试。",
     "PDF (*.pdf)": "PDF (*.pdf)",
 }
@@ -96,6 +97,17 @@ def wait_for_views(page, timeout=120.0):
     return False
 
 
+def open_page(page):
+    """Show the page so it has a scene to print; a page never opened cannot be written as PDF."""
+    import TechDrawGui
+    if TechDrawGui.getSceneForPage(page) is None:
+        page.ViewObject.doubleClicked()
+        Gui.updateGui()
+    if TechDrawGui.getSceneForPage(page) is None:
+        import SvenDrawing
+        raise SvenDrawing.DrawingError(tr("Open the drawing page before exporting it."))
+
+
 def export_drawing(page, pdf_path):
     """Write <name>.pdf, <name>.dxf and, when the page shows a BOM, <name>.csv. Returns the paths."""
     import TechDraw
@@ -103,6 +115,7 @@ def export_drawing(page, pdf_path):
     import SvenDrawing
 
     base = os.path.splitext(pdf_path)[0]
+    open_page(page)
     page.Document.recompute()
     refresh_bom_tables(page.Document)
     if not wait_for_views(page):

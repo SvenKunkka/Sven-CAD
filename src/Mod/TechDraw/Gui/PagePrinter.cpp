@@ -39,6 +39,7 @@
 #include <App/Document.h>
 #include <App/DocumentObject.h>
 #include <Base/Console.h>
+#include <Base/Exception.h>
 #include <Base/Stream.h>
 #include <Base/Tools.h>
 #include <Gui/Application.h>
@@ -386,6 +387,12 @@ void PagePrinter::printPdf(ViewProviderPage* vpPage, const std::string& file)
         return;
     }
 
+#ifdef FREECAD_PERSONAL_CAD
+    // A page that was never opened has no scene to render; exporting it used to crash.
+    if (!vpPage || !vpPage->getQGSPage() || !vpPage->getQTemplate()) {
+        throw Base::RuntimeError("Open the drawing page before exporting it as PDF.");
+    }
+#endif
     auto filespec = Base::Tools::escapeEncodeFilename(file);
     filespec = DU::cleanFilespecBackslash(filespec);
     QString outputFile = QString::fromStdString(filespec);

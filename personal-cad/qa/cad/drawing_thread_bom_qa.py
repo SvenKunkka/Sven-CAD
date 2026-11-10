@@ -3,6 +3,7 @@
 import argparse
 import csv
 import hashlib
+import html
 import json
 import math
 import os
@@ -128,8 +129,23 @@ def run_macro():
         def handle(modal):
             require(isinstance(modal, QtWidgets.QFileDialog) and modal.objectName() == "SvenDrawingExportDialog",
                     modal.objectName())
-            modal.selectFile(str(path))
-            QtTest.QTest.qWait(50)
+            # The dialog changes folder asynchronously; set the folder first and
+            # accept only once the name field shows the requested file.
+            modal.setDirectory(str(path.parent))
+            name_field = modal.findChild(QtWidgets.QLineEdit, "fileNameEdit")
+            require(name_field is not None, "file dialog has no name field")
+            for _ in range(100):
+                modal.selectFile(path.name)
+                if name_field.text() != path.name:
+                    name_field.setText(path.name)
+                QtTest.QTest.qWait(50)
+                if (Path(modal.directory().absolutePath()).resolve() == path.parent.resolve()
+                        and name_field.text() == path.name
+                        and [Path(f).resolve() for f in modal.selectedFiles()] == [path.resolve()]):
+                    break
+            else:
+                raise AssertionError(("file dialog did not take", str(path), modal.directory().absolutePath(),
+                                      name_field.text() if name_field else None, modal.selectedFiles()))
             modal.accept()
         return handle
 
@@ -154,6 +170,9 @@ def run_macro():
         doc.recompute()
         wait_views(page)
         doc.recompute()
+        wait_views(page)
+        # Let the BOM table refresh that follows a recompute run, as the event loop would.
+        QtTest.QTest.qWait(100)
         wait_views(page)
         return round(time.monotonic() - t0, 3)
 
@@ -397,15 +416,25 @@ def run_macro():
         return counts
 
     def check_bom(page, fx):
-        columns = D.bom_columns(page)
-        require(len(columns) == len(D.BOM_COLUMNS), [c.Name for c in columns])
         bom = D.page_bom(page)
         require(bom is not None, "page BOM")
         headings, rows = D.bom_table(bom)
-        texts = [list(c.Text) for c in columns]
-        require([t[0] for t in texts] == headings, (texts, headings))
-        for i, column in enumerate(texts):
-            require(column[1:] == [r[i] for r in rows], (headings[i], column, rows))
+        cells = D.bom_cells(page)
+        require(len(cells) == len(D.BOM_COLUMNS) * (len(rows) + 1), (len(cells), len(rows)))
+        require(not D.bom_needs_layout(page), "BOM table out of step with the BOM")
+        grid = D.bom_grid(page)
+        require(grid == [headings] + rows, (grid, headings, rows))
+        # Cells of a row share a baseline, cells of a column share a centre, rows go down the page.
+        by_row = {}
+        for c in cells:
+            by_row.setdefault(c.Row, []).append(c)
+        for r, row_cells in by_row.items():
+            require(len({round(c.Y.Value, 6) for c in row_cells}) == 1, ("row baseline", r))
+        for col in bom.columnsNames:
+            col_cells = sorted((c for c in cells if c.Column == col), key=lambda c: c.Row)
+            require(len({round(c.X.Value, 6) for c in col_cells}) == 1, ("column centre", col))
+            ys = [c.Y.Value for c in col_cells]
+            require(all(a > b for a, b in zip(ys, ys[1:])), ("rows order", col, ys))
         pn = headings.index("Part Number")
         qty = headings.index("Qty")
         fastener_rows = {r[pn]: int(r[qty]) for r in rows if r[pn]}
@@ -419,8 +448,22 @@ def run_macro():
                 require(r[headings.index("Company P/N")] == "", r)
         return {"headings": headings, "rows": rows}
 
+    def check_layout(page, tag):
+        """No callout or BOM text covers another, and all of it stays inside the frame."""
+        width, height = D._page_size(page)
+        texts = [v for v in page.Views if (D.is_callout(v) or D.is_bom_cell(v)) and any(list(v.Text))]
+        boxes = {v.Name: D.text_box(App.Vector(v.X.Value, v.Y.Value, 0), list(v.Text), v.TextSize.Value)
+                 for v in texts}
+        names = sorted(boxes)
+        clashes = [(a, b) for i, a in enumerate(names) for b in names[i + 1:]
+                   if D._overlap(boxes[a], boxes[b], gap=0.0)]
+        outside = [n for n, b in boxes.items() if b[0] < 10 or b[1] < 10 or b[2] > width - 10 or b[3] > height - 10]
+        require(not clashes and not outside, (tag, "text layout", clashes, outside))
+        return {"texts": len(boxes), "clashes": clashes, "outside": outside}
+
     def export(doc, page, tag):
         pdf = exports / f"{tag}.pdf"
+        checks.setdefault("layout", {})[tag] = check_layout(page, tag)
         select(doc, page)
         result = {}
 
@@ -441,7 +484,10 @@ def run_macro():
     def expected_texts(views, page):
         callouts = sorted({c.Text[0] for v in views.values() for c in D.callouts(v)})
         headings, rows = D.bom_table(D.page_bom(page))
-        return {"callouts": callouts, "bom": [headings] + rows}
+        width, height = D._page_size(page)
+        placed = [{"text": v.Text[0], "x": v.X.Value, "y": v.Y.Value} for v in page.Views
+                  if (D.is_callout(v) or D.is_bom_cell(v)) and list(v.Text) and v.Text[0]]
+        return {"callouts": callouts, "bom": [headings] + rows, "placed": placed, "page_mm": [width, height]}
 
     # ---------- scenario ----------
     def execute():
@@ -609,12 +655,63 @@ def dxf_entities(path):
                 entities.append(current)
             if value.strip() == "ENDSEC":
                 break
-            current = {"type": value.strip(), "layer": None, "text": None}
+            current = {"type": value.strip(), "layer": None, "text": None, "x": None, "y": None}
+        elif current is not None and code == "10" and current["x"] is None:
+            current["x"] = float(value)
+        elif current is not None and code == "20" and current["y"] is None:
+            current["y"] = float(value)
         elif current is not None and code == "8":
             current["layer"] = value.strip()
         elif current is not None and code == "1":
             current["text"] = value
     return entities
+
+
+def pdf_words(path):
+    """Words of the PDF with their boxes in page millimetres, Y up."""
+    out = subprocess.run([PDFTOTEXT, "-bbox", path, "-"], capture_output=True, text=True, check=True).stdout
+    page = re.search(r'<page width="([\d.]+)" height="([\d.]+)"', out)
+    width_pt, height_pt = float(page.group(1)), float(page.group(2))
+    words = []
+    for m in re.finditer(r'<word xMin="([\d.]+)" yMin="([\d.]+)" xMax="([\d.]+)" yMax="([\d.]+)">([^<]*)</word>', out):
+        x0, y0, x1, y1 = (float(m.group(i)) for i in range(1, 5))
+        words.append({"text": html.unescape(m.group(5)), "box": (x0, y0, x1, y1)})
+    return words, width_pt, height_pt
+
+
+def locate(words, text, width_pt, height_pt, page_mm):
+    """Centres, in page mm, of every run of PDF words that spells the text."""
+    tokens = text.split()
+    sx, sy = page_mm[0] / width_pt, page_mm[1] / height_pt
+    found = []
+    for i in range(len(words) - len(tokens) + 1):
+        run = words[i:i + len(tokens)]
+        if [w["text"] for w in run] != tokens:
+            continue
+        x0 = min(w["box"][0] for w in run)
+        x1 = max(w["box"][2] for w in run)
+        y0 = min(w["box"][1] for w in run)
+        y1 = max(w["box"][3] for w in run)
+        found.append(((x0 + x1) / 2 * sx, page_mm[1] - (y0 + y1) / 2 * sy))
+    return found
+
+
+def check_positions(info, pdf, entities, tolerance=1.5):
+    """Each callout and BOM cell sits at its page position in the PDF and in the DXF."""
+    words, width_pt, height_pt = pdf_words(pdf)
+    dxf = [e for e in entities if e["type"] == "TEXT" and e["text"]]
+    worst_pdf = worst_dxf = 0.0
+    misplaced = []
+    for item in info["placed"]:
+        spots = locate(words, item["text"], width_pt, height_pt, info["page_mm"])
+        d_pdf = min((math.hypot(x - item["x"], y - item["y"]) for x, y in spots), default=float("inf"))
+        d_dxf = min((math.hypot(e["x"] - item["x"], e["y"] - item["y"]) for e in dxf if e["text"] == item["text"]),
+                    default=float("inf"))
+        worst_pdf, worst_dxf = max(worst_pdf, d_pdf), max(worst_dxf, d_dxf)
+        if d_pdf > tolerance or d_dxf > 1e-6:
+            misplaced.append({**item, "pdf_mm": round(d_pdf, 3), "dxf_mm": round(d_dxf, 6)})
+    return {"checked": len(info["placed"]), "worst_pdf_mm": round(worst_pdf, 3),
+            "worst_dxf_mm": round(worst_dxf, 6), "misplaced": misplaced}
 
 
 def normalize(text):
@@ -648,7 +745,9 @@ def check_exports(report):
             "missing_in_pdf": missing_pdf + missing_pdf_cells, "pdf_bytes": Path(pdf).stat().st_size,
             "dxf_bytes": Path(dxf).stat().st_size,
         }
-        ok = csv_rows == info["bom"] and not (missing_dxf or missing_dxf_cells or missing_pdf or missing_pdf_cells)
+        results[tag]["positions"] = check_positions(info, pdf, entities)
+        ok = csv_rows == info["bom"] and not (missing_dxf or missing_dxf_cells or missing_pdf or missing_pdf_cells) \
+            and not results[tag]["positions"]["misplaced"]
         results[tag]["passed"] = ok
     # Stale text from before the change must be gone from the changed export.
     if "initial" in report.get("exports", {}) and "changed" in report["exports"]:

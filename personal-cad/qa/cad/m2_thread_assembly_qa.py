@@ -35,6 +35,48 @@ SHAFT_AT = (60.0, 20.0)
 SPACING = (90.0, 60.0)
 
 
+_ACTIVITY = []
+
+
+def keep_awake():
+    """Hold an NSProcessInfo activity so App Nap does not throttle a run while the display is off.
+
+    With the screen locked and the display asleep, macOS napped the app: GUI stages ran about five
+    times slower and hidden line removal moved to slow cores. Returns True when the activity is held."""
+    import ctypes
+    import ctypes.util
+    objc = ctypes.cdll.LoadLibrary(ctypes.util.find_library("objc"))
+    objc.objc_getClass.restype = ctypes.c_void_p
+    objc.objc_getClass.argtypes = [ctypes.c_char_p]
+    objc.sel_registerName.restype = ctypes.c_void_p
+    objc.sel_registerName.argtypes = [ctypes.c_char_p]
+    send = objc.objc_msgSend
+    send.restype = ctypes.c_void_p
+    send.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+    info = send(objc.objc_getClass(b"NSProcessInfo"), objc.sel_registerName(b"processInfo"))
+    make = ctypes.cast(objc.objc_msgSend, ctypes.CFUNCTYPE(ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                                                           ctypes.c_char_p))
+    reason = make(objc.objc_getClass(b"NSString"), objc.sel_registerName(b"stringWithUTF8String:"), b"M2 QA")
+    begin = ctypes.cast(objc.objc_msgSend, ctypes.CFUNCTYPE(ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                                                            ctypes.c_uint64, ctypes.c_void_p))
+    # NSActivityUserInitiated | NSActivityLatencyCritical
+    token = begin(info, objc.sel_registerName(b"beginActivityWithOptions:reason:"), 0x00FFFFFF | 0xFF00000000, reason)
+    if token:
+        send(token, objc.sel_registerName(b"retain"))
+        _ACTIVITY.append(token)
+    return bool(token)
+
+
+def screen_state():
+    out = subprocess.run(["/usr/sbin/ioreg", "-n", "Root", "-d1", "-a"], capture_output=True, text=True).stdout
+    try:
+        root = plistlib.loads(out.encode())
+        sessions = root.get("IOConsoleUsers", [])
+        return {"screen_locked": any(s.get("CGSSessionScreenIsLocked", False) for s in sessions)}
+    except Exception as error:
+        return {"error": str(error)}
+
+
 def run_macro():
     import resource
     import sys
@@ -54,6 +96,8 @@ def run_macro():
     stages = report["stages"]
     checks = report["checks"]
     started = time.monotonic()
+    report["app_nap_disabled"] = keep_awake()
+    report["screen_at_start"] = screen_state()
 
     def rss_mib():
         out = subprocess.run(["/bin/ps", "-o", "rss=", "-p", str(os.getpid())], capture_output=True, text=True).stdout

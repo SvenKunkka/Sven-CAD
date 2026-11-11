@@ -191,8 +191,10 @@ def _inside(a, b, tolerance):
     """True when a vertex of a lies inside the closed solid b."""
     if not (a.closed and b.closed):
         return False
-    if not b.box.isInside(a.box.Center) and not any(b.box.isInside(v.Point) for v in a.shape.Vertexes[:1]):
-        return False
+    outer = App.BoundBox(b.box)
+    outer.enlarge(tolerance)
+    if not outer.isInside(a.box):
+        return False  # a solid inside b has its box inside b's box; skip the costly classifier otherwise
     point = a.shape.Vertexes[0].Point if a.shape.Vertexes else a.box.Center
     return any(s.isInside(point, tolerance, True) for s in b.shape.Solids)
 

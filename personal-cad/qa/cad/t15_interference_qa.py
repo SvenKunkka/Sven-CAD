@@ -2,7 +2,7 @@
 
 Known-answer scene: contact, overlap with a known volume, clearance, a part fully inside another,
 a rotated linked instance, coincident duplicates, an open shell and a hidden part. Then the
-command dialog, a large grid of repeated parts with cancellation, and optionally a local private
+command dialog, named states, a large grid of repeated parts with cancellation, and optionally a local private
 model for timing only."""
 
 import argparse
@@ -184,6 +184,59 @@ def run_macro():
         checks["moved_part"] = "clear at 1 mm, contact when touching, overlap restored"
         require(len(doc.Objects) == n_objects and doc.UndoCount == undo, "check changed the document")
         return doc, product
+
+    # ---------- named states ----------
+    def check_states():
+        import SvenReplace
+        doc, product = known_scene()
+
+        def show(name, visible):
+            obj = doc.getObject(name)
+            obj.Visibility = visible
+            if obj.ViewObject:
+                obj.ViewObject.Visibility = visible
+
+        show("Overlap", False)
+        service = SvenReplace.capture(product, "Service")  # Hidden and Overlap hidden
+        show("Overlap", True)
+        show("Hidden", True)
+        everything = SvenReplace.capture(product, "Everything")  # nothing hidden
+        show("Hidden", False)
+        doc.recompute()
+        n_objects, undo = len(doc.Objects), doc.UndoCount
+        current = sorted(i.key for i in I.collect([product]))
+        a = I.check(state=service, clearance_limit=1.0)
+        pairs_a = {pair_name(r) for r in a["results"]}
+        require(a["instances"] == 9 and ("Base", "Overlap") not in pairs_a
+                and not any("Hidden" in p for p in pairs_a), ("service state", a["instances"], sorted(pairs_a)))
+        b = I.check(state=everything, clearance_limit=1.0)
+        got_b = {pair_name(r): r for r in b["results"]}
+        require(b["instances"] == 11 and ("Base", "Overlap") in got_b and ("Base", "Hidden") in got_b
+                and close_enough(got_b[("Base", "Hidden")]["volume"], 27.0), ("everything state", b["instances"], sorted(got_b)))
+        require(sorted(i.key for i in I.collect([product])) == current, "checking a state changed visibility")
+        require(len(doc.Objects) == n_objects and doc.UndoCount == undo, "state check changed the document")
+        info = {"service": {"hidden": SvenReplace.state_hidden(service), "instances": a["instances"],
+                            "pairs": len(pairs_a)},
+                "everything": {"hidden": SvenReplace.state_hidden(everything), "instances": b["instances"],
+                               "hidden_overlap": got_b[("Base", "Hidden")]["volume"]},
+                "document_visibility_unchanged": True}
+        if App.GuiUp:
+            Gui.Selection.clearSelection()
+            dialog = IG.InterferenceDialog(doc, [])
+            items = [(dialog.scope_box.itemText(i), dialog.scope_box.itemData(i)) for i in range(dialog.scope_box.count())]
+            index = next((i for i, (_t, d) in enumerate(items) if d == "state:" + service.Name), -1)
+            require(index >= 0, ("state not offered in dialog", items))
+            dialog.scope_box.setCurrentIndex(index)
+            dialog.limit.setValue(1.0)
+            report = dialog.compute()
+            require(report is not None and report["instances"] == 9 and dialog.table.rowCount() == len(report["results"]),
+                    ("dialog state check", report and report["instances"]))
+            info["dialog"] = {"scope_items": [t for t, _d in items], "instances": report["instances"],
+                              "rows": dialog.table.rowCount()}
+            dialog.dialog.reject()
+            dialog.dialog.deleteLater()
+        checks["named_states"] = info
+        App.closeDocument(doc.Name)
 
     # ---------- dialog ----------
     def wait_until(predicate, timeout=60):
@@ -400,7 +453,7 @@ def run_macro():
         checks["private"] = info
 
     def execute():
-        steps = [("known", check_known), ("dialog", check_dialog), ("grid", check_grid), ("private", check_private)]
+        steps = [("known", check_known), ("states", check_states), ("dialog", check_dialog), ("grid", check_grid), ("private", check_private)]
         try:
             for name, step in steps:
                 log("start", name=name, rss_mib=rss_mib())

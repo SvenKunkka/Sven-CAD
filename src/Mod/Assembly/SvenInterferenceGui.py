@@ -13,6 +13,7 @@ ZH = {
     "Scope": "范围",
     "Selected components ({n})": "选中的零部件（{n}）",
     "All visible components": "全部可见零部件",
+    "Named state: {name}": "命名状态：{name}",
     "Report clearance below": "报告小于此值的间隙",
     "Include contacts": "包含接触",
     "Compute": "计算",
@@ -133,6 +134,12 @@ class InterferenceDialog:
         if scope:
             self.scope_box.addItem(tr("Selected components ({n})", n=len(scope)), "selection")
         self.scope_box.addItem(tr("All visible components"), "visible")
+        try:
+            import SvenReplace
+            for state in SvenReplace.states(doc):
+                self.scope_box.addItem(tr("Named state: {name}", name=state.Label), "state:" + state.Name)
+        except Exception:
+            pass
         form.addRow(tr("Scope"), self.scope_box)
         self.limit = QtWidgets.QDoubleSpinBox(dialog)
         self.limit.setObjectName("SvenInterferenceClearance")
@@ -205,10 +212,13 @@ class InterferenceDialog:
         self.cancel_button.setEnabled(True)
         self.table.setRowCount(0)
         try:
-            use_selection = self.scope_box.currentData() == "selection"
-            roots = self.scope if use_selection else SvenInterference.default_roots(self.doc)
+            data = self.scope_box.currentData() or ""
+            use_selection = data == "selection"
+            state = self.doc.getObject(data[6:]) if data.startswith("state:") else None
+            roots = self.scope if use_selection else (None if state else SvenInterference.default_roots(self.doc))
             self.report = SvenInterference.check(
-                roots, visible_only=not use_selection, clearance_limit=self.limit.value() or None,
+                roots, doc=self.doc, state=state, visible_only=not use_selection,
+                clearance_limit=self.limit.value() or None,
                 include_contacts=self.contacts.isChecked(), cancel=self._cancel, progress=self._progress)
         except SvenInterference.InterferenceError as error:
             self.status.setText(tr(str(error)))

@@ -285,15 +285,32 @@ def measure(a, b, clearance_limit, contact_tolerance):
     return result
 
 
+def state_instances(state):
+    """The solid instances of a named state's assembly that the state shows.
+
+    The state is read, not applied: the document's current visibility is left alone, and a part
+    hidden in one instance of a shared component stays visible in the other instances."""
+    import SvenReplace
+    assembly = state.SvenAssembly
+    if assembly is None:
+        raise InterferenceError("Nothing to check.")
+    hidden = SvenReplace.state_hidden(state)
+    return [inst for inst in collect([assembly], visible_only=False)
+            if not any(inst.sub.startswith(h) for h in hidden)]
+
+
 def check(roots=None, doc=None, *, visible_only=True, clearance_limit=None, contact_tolerance=1e-6,
-          allowed=(), include_contacts=True, cancel=None, progress=None, instances=None):
+          allowed=(), include_contacts=True, cancel=None, progress=None, instances=None, state=None):
     """Check every candidate pair under the roots.
 
     allowed: pairs of rules, each matching an instance key, object, source or root name; a matching
     pair is still reported but marked allowed and left out of the problem count.
     cancel(): return True to stop; the report then has cancelled=True and the pairs done so far.
-    progress(done, total): called between pairs."""
+    progress(done, total): called between pairs.
+    state: a named state (see SvenReplace.capture); checks the parts it shows instead of the roots."""
     started = time.monotonic()
+    if instances is None and state is not None:
+        instances = state_instances(state)
     if instances is None:
         if roots is None:
             if doc is None:

@@ -448,7 +448,7 @@ void DesignToolbar::rebuildGroups(int tab)
                {"Std_Transform", {"Move", "移动"}, "Std_TransformManip"}},
               {part ? "Part_Chamfer" : "PartDesign_Chamfer", "PartDesign_Draft",
                "Part_Slice", "Part_Scale", "Std_Alignment", "Part_ColorPerFace",
-               "Part_RefineShape"});
+               "Part_RefineShape", "Std_ToggleSuppress", "Std_DependencyGraph"});
         group(*row, {"Assemble", "装配"},
               {{"PersonalCAD_Joint", {"Joint", "联接"}, "Link"},
                {"PersonalCAD_InsertFastener", {"Fastener", "紧固件"}, "Link"}},

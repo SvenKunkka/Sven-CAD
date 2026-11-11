@@ -72,7 +72,7 @@ def run_macro():
         end = time.monotonic() + timeout
         while time.monotonic() < end:
             QtWidgets.QApplication.processEvents()
-            if all(not o.isTouched() and (not hasattr(o, "getVisibleEdges") or o.getVisibleEdges()) for o in objs):
+            if all(not o.waitingForResult() and o.getVisibleEdges() for o in objs):
                 return True
             QtTest.QTest.qWait(100)
         return False
@@ -196,12 +196,27 @@ def run_macro():
             sec = made["section"]
             checks["section"] = {"edges": len(sec.getVisibleEdges()), "symbol": sec.SectionSymbol,
                                  "base": sec.BaseView.Name}
-            require(checks["section"]["edges"] > 0 and sec.BaseView == v["Front"], checks["section"])
+            checks["section"]["front"] = v["Front"].Name
+            require(checks["section"]["edges"] > 0 and sec.BaseView.Name == v["Front"].Name, checks["section"])
             xview = made["exploded"]
-            k = xview.Scale * math.sqrt(2.0 / 3.0)
-            trail_2d = [e for e in xview.getVisibleEdges() if abs(e.Length - 30 * k) < 1e-3]
-            checks["exploded_view_trails"] = len(trail_2d)
-            require(len(trail_2d) >= 2, ("trails in view", [round(e.Length, 4) for e in xview.getVisibleEdges()][:40]))
+
+            def edge_count(view_obj):
+                hidden = view_obj.getHiddenEdges() if hasattr(view_obj, "getHiddenEdges") else []
+                return len(view_obj.getVisibleEdges()) + len(hidden)
+
+            with_trails = edge_count(xview)
+            xsource.SvenTrails = False
+            doc.recompute()
+            require(wait_views([xview]), "exploded view did not update")
+            without_trails = edge_count(xview)
+            xsource.SvenTrails = True
+            doc.recompute()
+            require(wait_views([xview]), "exploded view did not update back")
+            checks["exploded_view_edges"] = {"with_trails": with_trails, "without_trails": without_trails,
+                                             "restored": edge_count(xview)}
+            require(with_trails > without_trails and edge_count(xview) == with_trails,
+                    checks["exploded_view_edges"])
+            require(placements(doc) == before, "trail toggle changed the assembly")
 
             # dimension
             dim = made["dimension"]
@@ -221,6 +236,9 @@ def run_macro():
             # template
             texts = dict(made["template"].EditableTexts)
             checks["template_fields"] = made["fields"]
+            leftover = {k: t for k, t in texts.items() if t and k not in made["fields"] and k != "language_code"}
+            checks["template_cleared"] = sorted(k for k, t in texts.items() if not t)
+            require(not leftover, ("template sample values left on the sheet", leftover))
             require(texts.get("title") == "Product" and texts.get("supplementary_title_1") == "Service"
                     and texts.get("scale") == S.scale_text(made["scale"]) and texts.get("sheet_number") == "1/1",
                     texts)
@@ -238,18 +256,19 @@ def run_macro():
 
             # save and reopen
             saved = work / "t17-sheet.FCStd"
+            names = {"page": page.Name, "source": source.Name, "xsource": xsource.Name, "dim": made["dimension"].Name}
             doc.saveAs(str(saved))
             App.closeDocument(doc.Name)
             doc2 = App.openDocument(str(saved))
-            page2 = doc2.getObject(page.Name)
-            src2 = doc2.getObject(source.Name)
+            page2 = doc2.getObject(names["page"])
+            src2 = doc2.getObject(names["source"])
             src2.touch()
             doc2.recompute()
             views2 = [o for o in page2.Views if o.isDerivedFrom("TechDraw::DrawViewPart")]
             require(wait_views(views2), "reopened views did not compute")
-            dim2 = doc2.getObject(dim.Name)
+            dim2 = doc2.getObject(names["dim"])
             checks["reopened"] = {"views": len(page2.Views), "solids": src2.SvenSolids,
-                                  "trails": doc2.getObject(xsource.Name).SvenTrailCount,
+                                  "trails": doc2.getObject(names["xsource"]).SvenTrailCount,
                                   "dimension": dim2.getRawValue(),
                                   "title": dict(page2.Template.EditableTexts).get("title")}
             require(src2.SvenSolids == 7 and abs(dim2.getRawValue() - 60) < 1e-6

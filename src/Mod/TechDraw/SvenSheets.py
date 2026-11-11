@@ -181,13 +181,20 @@ def pick_scale(box, area):
     return STANDARD_SCALES[-1]
 
 
+KEEP_FIELDS = ("language_code",)
+
+
 def _fill_template(template, values):
+    """Fill the title block. Sample entries of the template (names, material, numbers) are cleared,
+    not printed: what is not known from the model is left blank for the user."""
     texts = dict(template.EditableTexts)
     filled = {}
-    for key, value in values.items():
-        if key in texts:
-            texts[key] = value
-            filled[key] = value
+    for key in texts:
+        if key in values:
+            texts[key] = values[key]
+            filled[key] = values[key]
+        elif key not in KEEP_FIELDS:
+            texts[key] = ""
     template.EditableTexts = texts
     return filled
 
@@ -200,6 +207,14 @@ def _extreme_vertices(view):
     left = min(range(len(verts)), key=lambda i: (verts[i].x, verts[i].y))
     right = max(range(len(verts)), key=lambda i: (verts[i].x, -verts[i].y))
     return left, right
+
+
+def _wait_for_views(page):
+    """Hidden line removal runs in the background in the GUI; vertices exist only after it."""
+    if not App.GuiUp:
+        return True
+    import SvenDrawingGui
+    return SvenDrawingGui.wait_for_views(page)
 
 
 def make_sheet(assembly, state=None, section=True, exploded=True, fields=None, name="AssemblySheet"):
@@ -265,6 +280,7 @@ def make_sheet(assembly, state=None, section=True, exploded=True, fields=None, n
             made["exploded_source"] = xsource
             made["exploded"] = xview
         doc.recompute()
+        _wait_for_views(page)
         front = views["Front"]
         ends = _extreme_vertices(front)
         if ends is not None:
@@ -272,6 +288,8 @@ def make_sheet(assembly, state=None, section=True, exploded=True, fields=None, n
             dim.Type = "DistanceX"
             dim.References2D = [(front, f"Vertex{ends[0]}"), (front, f"Vertex{ends[1]}")]
             page.addView(dim)
+            dim.X = 0.0
+            dim.Y = -(box.ZLength * scale / 2.0 + 8.0)  # below the view, clear of the geometry
             made["dimension"] = dim
         values = {"title": assembly.Label, "scale": scale_text(scale),
                   "date_of_issue": datetime.date.today().isoformat(), "sheet_number": "1/1"}

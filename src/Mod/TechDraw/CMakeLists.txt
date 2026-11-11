@@ -20,7 +20,7 @@ if(BUILD_GUI)
 endif(BUILD_GUI)
 
 if(FREECAD_PERSONAL_CAD)
-    list(APPEND TechDraw_Scripts SvenDrawing.py SvenSheets.py)
+    list(APPEND TechDraw_Scripts SvenDrawing.py SvenSheets.py SvenPackage.py)
     if(BUILD_GUI)
         list(APPEND TechDraw_Scripts SvenDrawingGui.py)
     endif()

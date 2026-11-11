@@ -480,7 +480,8 @@ void DesignToolbar::rebuildGroups(int tab)
         group(*row, {"Create", "创建"},
               {{"Assembly_CreateAssembly", {"New Assembly", "新建装配"}},
                {"Assembly_InsertNewPart", {"New Component", "新建零件"}},
-               {"PersonalCAD_AssemblySheet", {"Drawing", "出图"}}});
+               {"PersonalCAD_AssemblySheet", {"Drawing", "出图"}},
+               {"PersonalCAD_ExportPackage", {"Package", "出包"}}});
         group(*row, {"Relationships", "关系"},
               {{"PersonalCAD_Joint", {"Joint", "联接"}, "Link"},
                {"Assembly_CreateJointRigidGroup", {"Rigid Group", "刚性组"}},

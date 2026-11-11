@@ -9,6 +9,7 @@ import SvenReplace as R
 REPLACE_COMMAND = "PersonalCAD_ReplaceComponent"
 STATES_COMMAND = "PersonalCAD_NamedStates"
 SHEET_COMMAND = "PersonalCAD_AssemblySheet"
+PACKAGE_COMMAND = "PersonalCAD_ExportPackage"
 
 ZH = {
     "Replace Component": "替换零部件",
@@ -62,6 +63,12 @@ ZH = {
     "Exploded view of the state": "状态的爆炸图",
     "Create": "生成",
     "Created {page}: {views} views, scale {scale}.": "已生成 {page}：{views} 个视图，比例 {scale}。",
+    "Export Package": "一键出包",
+    "Write coloured STEP, PDF, DXF, BOM CSV and a manifest of this revision; the last good package stays until all succeed":
+        "导出本修订的有色 STEP、PDF、DXF、BOM CSV 和来源清单；全部成功前保留上一次有效成果",
+    "Create an assembly drawing first.": "请先生成装配图纸。",
+    "Package written": "已出包",
+    "Package failed; the previous package is unchanged": "出包失败，上一次的成果未改动",
     "Saved {name}: {n} hidden.": "已保存 {name}：隐藏 {n} 项。",
 }
 
@@ -511,6 +518,48 @@ class StatesCommand:
         _OPEN.exec()
 
 
+def package_page(doc, assembly):
+    pages = [o for o in doc.Objects if o.isDerivedFrom("TechDraw::DrawPage")]
+    sheets = [p for p in pages if any(getattr(v, "Source", None) and
+                                      getattr(v.Source[0], "SvenAssembly", None) == assembly
+                                      for v in p.Views if hasattr(v, "Source"))]
+    return (sheets or pages or [None])[0]
+
+
+class PackageCommand:
+    def GetResources(self):
+        return {"Pixmap": "Std_Export", "MenuText": "Export Package",
+                "ToolTip": tr("Write coloured STEP, PDF, DXF, BOM CSV and a manifest of this revision; "
+                              "the last good package stays until all succeed")}
+
+    def IsActive(self):
+        return App.ActiveDocument is not None and _assembly(App.ActiveDocument) is not None
+
+    def Activated(self):
+        import os
+        import SvenPackage
+        _, QtWidgets = _qt()
+        doc = App.ActiveDocument
+        assembly = _assembly(doc)
+        page = package_page(doc, assembly)
+        title = tr("Export Package")
+        if page is None:
+            QtWidgets.QMessageBox.information(Gui.getMainWindow(), title, tr("Create an assembly drawing first."))
+            return
+        start = os.path.dirname(doc.FileName) if doc.FileName else os.path.expanduser("~")
+        folder = QtWidgets.QFileDialog.getExistingDirectory(Gui.getMainWindow(), title, start)
+        if not folder:
+            return
+        try:
+            manifest = SvenPackage.export_package(assembly, page, folder)
+        except Exception as error:
+            QtWidgets.QMessageBox.warning(Gui.getMainWindow(), tr("Package failed; the previous package is unchanged"),
+                                          str(error))
+            return
+        QtWidgets.QMessageBox.information(Gui.getMainWindow(), tr("Package written"),
+                                          "\n".join(o["file"] for o in manifest["outputs"]))
+
+
 class SheetCommand:
     def GetResources(self):
         return {"Pixmap": "TechDraw_PageDefault", "MenuText": "Assembly Drawing",
@@ -536,3 +585,4 @@ def register():
     Gui.addCommand(REPLACE_COMMAND, ReplaceCommand())
     Gui.addCommand(STATES_COMMAND, StatesCommand())
     Gui.addCommand(SHEET_COMMAND, SheetCommand())
+    Gui.addCommand(PACKAGE_COMMAND, PackageCommand())

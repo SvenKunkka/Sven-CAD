@@ -318,3 +318,10 @@ except ImportError:
     pass
 else:
     SvenFastenersGui.register()
+
+try:
+    import SvenInterferenceGui
+except ImportError:
+    pass
+else:
+    SvenInterferenceGui.register()

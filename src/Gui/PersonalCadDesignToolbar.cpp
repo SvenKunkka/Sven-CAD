@@ -524,14 +524,16 @@ void DesignToolbar::rebuildGroups(int tab)
     }
     if (tab == Assembly) {
         group(*row, {"Inspect", "检查"},
-              {{"Std_Measure", {"Measure", "测量"}}, {"Assembly_CreateBom", {"BOM", "物料清单"}}},
+              {{"Std_Measure", {"Measure", "测量"}},
+               {"PersonalCAD_Interference", {"Interference", "干涉"}},
+               {"Assembly_CreateBom", {"BOM", "物料清单"}}},
               {"Std_ToggleClipPlane", "Part_CheckGeometry"});
     }
     else {
         group(*row, {"Inspect", "检查"},
               {{"Std_Measure", {"Measure", "测量"}},
                {"Std_ToggleClipPlane", {"Section", "剖面"}}},
-              {"Part_CheckGeometry", "Std_ViewFitAll", "Std_ViewFitSelection"});
+              {"PersonalCAD_Interference", "Part_CheckGeometry", "Std_ViewFitAll", "Std_ViewFitSelection"});
     }
     if (tab == Sketch) {
         group(*row, {"Insert", "插入"}, {{"Sketcher_Projection", {"Project", "投影"}}}, {"Std_Import"});

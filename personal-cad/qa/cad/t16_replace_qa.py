@@ -41,6 +41,8 @@ def run_macro():
     import SvenReplace as R
     import SvenReplaceGui as RG
     import SvenInterference as SI
+    if dev_path:
+        RG.register()  # the commands must open the dialogs of the modules under test
 
     output = Path(os.environ[OUTPUT_ENV])
     config = json.loads(os.environ[CONFIG_ENV])
@@ -273,14 +275,20 @@ def run_macro():
             checks["bom_before"] = bom_before
             require(("Motor", "FIXTURE-V1", "3") in bom_before, bom_before)
             checks["state_before"] = R.state_hidden(fx["state"])
+            require(len(checks["state_before"]) == 3 and "Motor2." in checks["state_before"], checks["state_before"])
             placements_before = {n: App.Placement(l.Placement) for n, l in links.items()}
 
             log("start", name="dialog")
             Gui.Selection.clearSelection()
             Gui.Selection.addSelection(doc.Name, asm.Name, "Motor1.")
             Gui.Selection.addSelection(doc.Name, asm.Name, "Motor2.")
+            checks["selected_instances"] = [l.Name for l in RG.selected_instances()]
             Gui.runCommand(REPLACE, 0)
             dialog = RG.open_dialog()
+            checks["replace_command_opened_dialog"] = dialog is not None
+            if dialog is None:
+                RG.ReplaceCommand().Activated()  # surfaces the error the command swallowed
+                dialog = RG.open_dialog()
             require(isinstance(dialog, RG.ReplaceDialog) and dialog.dialog.isVisible(), "replace dialog")
             widget = dialog.dialog
             require(widget.windowTitle() == ("替换零部件" if zh else "Replace Component"), widget.windowTitle())
@@ -348,13 +356,15 @@ def run_macro():
                     and links["Motor3"].LinkedObject == fx["v1"], "links")
             after = leaf_centres(asm)
             leaf_map = {e["old"]: e["new"] for e in rep["match"]["entries"] if e["old"] and e["new"]}
+            rigid = {e["old"] for e in rep["match"]["entries"]
+                     if e["old"] and e["new"] and e["status"] in ("same", "renamed") and e["note"] != "manual"}
             moved = {}
             for key, centre in before.items():
                 parts = key.split(".")
                 link = parts[1]
                 old_path = ".".join(parts[2:])
                 if link in ("Motor1", "Motor2"):
-                    if old_path not in leaf_map:
+                    if old_path not in rigid:
                         continue
                     new_key = ".".join(parts[:2]) + "." + leaf_map[old_path]
                 else:
@@ -411,12 +421,18 @@ def run_macro():
             # ---- BOM
             bom_after = R.bom_rows(asm)
             checks["bom_after"] = bom_after
-            require(("Motor", "FIXTURE-V2", "2") in bom_after and ("Motor", "FIXTURE-V1", "1") in bom_after, bom_after)
+            by_pn = {pn: qty for _name, pn, qty in bom_after}
+            require(by_pn.get("FIXTURE-V2") == "2" and by_pn.get("FIXTURE-V1") == "1" and len(bom_after) == 3,
+                    bom_after)
             require(list(fx["note"].References[1]) == [p["sub"] for p in unresolved], "unresolved ref changed")
 
             # ---- states dialog
             Gui.runCommand(STATES, 0)
             sd = RG.open_dialog()
+            if not isinstance(sd, RG.StatesDialog):
+                checks["states_command_active"] = RG.StatesCommand().IsActive()
+                RG.StatesCommand().Activated()  # surfaces the error the command swallowed
+                sd = RG.open_dialog()
             require(isinstance(sd, RG.StatesDialog) and sd.dialog.isVisible(), "states dialog")
             sd.name.setText("Exploded")
             sd.view.setCurrentIndex(sd.view.findData(fx["view"].Name))

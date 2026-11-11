@@ -111,6 +111,7 @@ class ReplaceDialog:
         self.links = links
         self.result = None
         self.choices = {}
+        self.manual = {}
         self.last = None
         dialog = QtWidgets.QDialog(Gui.getMainWindow())
         dialog.setObjectName("SvenReplaceDialog")
@@ -164,8 +165,13 @@ class ReplaceDialog:
             button.clicked.connect(slot)
             buttons.addWidget(button)
         layout.addLayout(buttons)
-        self.version.currentIndexChanged.connect(lambda *_: self.analyze())
+        self.version.currentIndexChanged.connect(self.version_changed)
         self.fill_versions()
+
+    def version_changed(self, *_):
+        self.manual = {}
+        self.choices = {}
+        self.analyze()
 
     def fill_versions(self, select=None):
         self.version.blockSignals(True)
@@ -178,6 +184,8 @@ class ReplaceDialog:
             if index >= 0:
                 self.version.setCurrentIndex(index)
         self.version.blockSignals(False)
+        self.manual = {}
+        self.choices = {}
         if self.version.count():
             self.analyze()
         else:
@@ -194,7 +202,7 @@ class ReplaceDialog:
         """Import a STEP file into the document as a new version and select it."""
         import Import
         before = set(o.Name for o in self.doc.Objects)
-        Import.insert(path, self.doc.Name)
+        Import.insert(str(path), self.doc.Name)
         self.doc.recompute()
         added = [o for o in self.doc.Objects if o.Name not in before]
         roots = [o for o in added if not any(p in added for p in o.InList)]
@@ -209,12 +217,12 @@ class ReplaceDialog:
         return self.doc.getObject(name) if name else None
 
     def resolutions(self):
-        out = {}
+        """Manual picks so far; they stay when the row is no longer ambiguous."""
         for path, combo in self.choices.items():
             data = combo.currentData()
             if data is not None:
-                out[path] = data if data != "" else None
-        return out
+                self.manual[path] = data if data != "" else None
+        return dict(self.manual)
 
     def analyze(self):
         QtCore, QtWidgets = _qt()
@@ -227,7 +235,8 @@ class ReplaceDialog:
         self.choices = {}
         self.table.setRowCount(len(result["entries"]))
         for row, entry in enumerate(result["entries"]):
-            self.table.setItem(row, 0, QtWidgets.QTableWidgetItem(tr(entry["status"])))
+            status = tr(entry["status"]) + (" ✋" if entry["note"] == "manual" else "")
+            self.table.setItem(row, 0, QtWidgets.QTableWidgetItem(status))
             old_text = entry["old_label"] + (f"  [{entry['old_part_number']}]" if entry["old_part_number"] else "")
             self.table.setItem(row, 1, QtWidgets.QTableWidgetItem(old_text))
             if entry["status"] in (R.AMBIGUOUS, R.MISSING) and entry["old"] is not None:

@@ -596,6 +596,14 @@ def _parent_and_name(root, sub):
     return parent, parts[-1]
 
 
+def _holds_parts(obj):
+    """Solids and the containers that can hold them; not exploded-view steps or other helpers."""
+    target = obj.getLinkedObject(True) or obj
+    return SI._is_leaf(target) or target.isDerivedFrom("App::Part") or \
+        target.isDerivedFrom("App::DocumentObjectGroup") or target.TypeId == "App::Link" or \
+        target.isDerivedFrom("Assembly::AssemblyObject")
+
+
 def _nodes(assembly):
     """(path, parent, name, child) for every part container and solid below the assembly, depth first."""
     out = []
@@ -605,7 +613,7 @@ def _nodes(assembly):
             return
         for name in parent.getSubObjects():
             child = parent.getSubObject(name, retType=1)
-            if child is None or SI._skipped(child):
+            if child is None or SI._skipped(child) or not _holds_parts(child):
                 continue
             bare = name.rstrip(".")
             path = sub + bare + "."

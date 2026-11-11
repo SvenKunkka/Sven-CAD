@@ -479,7 +479,8 @@ void DesignToolbar::rebuildGroups(int tab)
               {"Std_Import", "PersonalCAD_ReplaceFastener", "PersonalCAD_FastenerSummary"});
         group(*row, {"Create", "创建"},
               {{"Assembly_CreateAssembly", {"New Assembly", "新建装配"}},
-               {"Assembly_InsertNewPart", {"New Component", "新建零件"}}});
+               {"Assembly_InsertNewPart", {"New Component", "新建零件"}},
+               {"PersonalCAD_AssemblySheet", {"Drawing", "出图"}}});
         group(*row, {"Relationships", "关系"},
               {{"PersonalCAD_Joint", {"Joint", "联接"}, "Link"},
                {"Assembly_CreateJointRigidGroup", {"Rigid Group", "刚性组"}},

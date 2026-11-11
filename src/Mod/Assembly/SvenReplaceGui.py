@@ -8,6 +8,7 @@ import SvenReplace as R
 
 REPLACE_COMMAND = "PersonalCAD_ReplaceComponent"
 STATES_COMMAND = "PersonalCAD_NamedStates"
+SHEET_COMMAND = "PersonalCAD_AssemblySheet"
 
 ZH = {
     "Replace Component": "替换零部件",
@@ -52,6 +53,15 @@ ZH = {
     "Delete": "删除",
     "Hidden: {n}": "隐藏：{n}",
     "Applied {name}: {n} hidden.": "已应用 {name}：隐藏 {n} 项。",
+    "Assembly Drawing": "装配出图",
+    "Create a drawing with three views, a section and the exploded view of a named state":
+        "按命名状态生成三视图、剖视和爆炸图",
+    "State": "状态",
+    "(as shown)": "（当前显示）",
+    "Section view": "剖视图",
+    "Exploded view of the state": "状态的爆炸图",
+    "Create": "生成",
+    "Created {page}: {views} views, scale {scale}.": "已生成 {page}：{views} 个视图，比例 {scale}。",
     "Saved {name}: {n} hidden.": "已保存 {name}：隐藏 {n} 项。",
 }
 
@@ -398,6 +408,63 @@ class StatesDialog:
         return self.dialog
 
 
+class SheetDialog:
+    def __init__(self, doc, assembly):
+        _, QtWidgets = _qt()
+        self.doc = doc
+        self.assembly = assembly
+        self.made = None
+        dialog = QtWidgets.QDialog(Gui.getMainWindow())
+        dialog.setObjectName("SvenSheetDialog")
+        dialog.setWindowTitle(tr("Assembly Drawing"))
+        self.dialog = dialog
+        layout = QtWidgets.QVBoxLayout(dialog)
+        form = QtWidgets.QFormLayout()
+        self.state = QtWidgets.QComboBox(dialog)
+        self.state.setObjectName("SvenSheetState")
+        self.state.addItem(tr("(as shown)"), "")
+        for state in R.states(doc):
+            if state.SvenAssembly == assembly:
+                self.state.addItem(state.Label, state.Name)
+        form.addRow(tr("State"), self.state)
+        self.section = QtWidgets.QCheckBox(tr("Section view"), dialog)
+        self.section.setObjectName("SvenSheetSection")
+        self.section.setChecked(True)
+        form.addRow("", self.section)
+        self.exploded = QtWidgets.QCheckBox(tr("Exploded view of the state"), dialog)
+        self.exploded.setObjectName("SvenSheetExploded")
+        self.exploded.setChecked(True)
+        form.addRow("", self.exploded)
+        layout.addLayout(form)
+        self.status = QtWidgets.QLabel("", dialog)
+        self.status.setObjectName("SvenSheetStatus")
+        layout.addWidget(self.status)
+        buttons = QtWidgets.QHBoxLayout()
+        buttons.addStretch(1)
+        for name, text, slot in (("SvenSheetCreate", "Create", self.create), ("SvenSheetClose", "Close", dialog.close)):
+            button = QtWidgets.QPushButton(tr(text), dialog)
+            button.setObjectName(name)
+            button.clicked.connect(slot)
+            buttons.addWidget(button)
+        layout.addLayout(buttons)
+
+    def create(self):
+        import SvenSheets
+        name = self.state.currentData()
+        state = self.doc.getObject(name) if name else None
+        made = SvenSheets.make_sheet(self.assembly, state, section=self.section.isChecked(),
+                                     exploded=self.exploded.isChecked())
+        self.made = made
+        count = len(made["views"]) + ("section" in made) + ("exploded" in made)
+        self.status.setText(tr("Created {page}: {views} views, scale {scale}.", page=made["page"].Label,
+                               views=count, scale=SvenSheets.scale_text(made["scale"])))
+        return made
+
+    def exec(self):
+        self.dialog.show()
+        return self.dialog
+
+
 def _assembly(doc):
     try:
         import UtilsAssembly
@@ -444,6 +511,20 @@ class StatesCommand:
         _OPEN.exec()
 
 
+class SheetCommand:
+    def GetResources(self):
+        return {"Pixmap": "TechDraw_PageDefault", "MenuText": "Assembly Drawing",
+                "ToolTip": tr("Create a drawing with three views, a section and the exploded view of a named state")}
+
+    def IsActive(self):
+        return App.ActiveDocument is not None and _assembly(App.ActiveDocument) is not None
+
+    def Activated(self):
+        global _OPEN
+        _OPEN = SheetDialog(App.ActiveDocument, _assembly(App.ActiveDocument))
+        _OPEN.exec()
+
+
 _OPEN = None
 
 
@@ -454,3 +535,4 @@ def open_dialog():
 def register():
     Gui.addCommand(REPLACE_COMMAND, ReplaceCommand())
     Gui.addCommand(STATES_COMMAND, StatesCommand())
+    Gui.addCommand(SHEET_COMMAND, SheetCommand())

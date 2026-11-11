@@ -66,7 +66,12 @@ def _is_leaf(obj):
     return any(linked.isDerivedFrom(t) for t in LEAF_TYPES)
 
 
+FASTENER_LIBRARY = "SvenFastenerLibrary"
+
+
 def _skipped(obj):
+    if obj.Name.startswith(FASTENER_LIBRARY) or (obj.TypeId != "App::Link" and hasattr(obj, "FastenerKind")):
+        return True  # fastener sources are templates for the placed links, not parts of the design
     linked = obj.getLinkedObject(True) or obj
     return any(linked.isDerivedFrom(t) for t in SKIP_TYPES) or linked.TypeId.startswith("Assembly::Joint") \
         or linked.TypeId in ("Assembly::JointGroup", "Assembly::ViewGroup", "Assembly::BomGroup",

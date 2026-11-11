@@ -219,7 +219,7 @@ def run_macro():
         require(dialog.overlay.node is not None, "overlap volume not shown")
         Gui.SendMsgToActiveView("ViewFit")
         QtTest.QTest.qWait(300)
-        suffix = "-zh" if chinese else ""
+        suffix = "-zh" if chinese else "-en"
         widget.grab().save(str(shots / f"dialog{suffix}.png"))
         Gui.getMainWindow().grab().save(str(shots / f"window{suffix}.png"))
         if chinese:
@@ -245,18 +245,23 @@ def run_macro():
             QtTest.QTest.qWait(400)
             button = ribbon.findChild(QtWidgets.QToolButton, COMMAND)
             info["ribbon_button"] = button.text() if button is not None and button.isVisible() else None
-        require(info.get("ribbon_button") == "Interference", ("ribbon", info))
-        info.update(dialog_run(doc))
+        first_chinese = IG.chinese()
+        info["locale"] = Gui.getLocale()
+        require(info.get("ribbon_button") == ("干涉" if first_chinese else "Interference"), ("ribbon", info))
         undo = doc.UndoCount
+        info["first"] = dialog_run(doc, chinese=first_chinese)
         require(doc.UndoCount == undo, "dialog changed the document")
         App.closeDocument(doc.Name)
-        name = next(k for k, c in Gui.supportedLocales().items() if c in ("zh-CN", "zh_CN"))
+        locales = Gui.supportedLocales()
+        name = next(k for k, c in locales.items() if (c in ("en", "en-US", "en_US")) == first_chinese
+                    and (first_chinese or c in ("zh-CN", "zh_CN")))
         previous = Gui.getLocale()
         Gui.setLocale(name)
         QtTest.QTest.qWait(600)
         try:
             doc, _ = known_scene()
-            info["chinese"] = dialog_run(doc, chinese=True)
+            info["second_locale"] = Gui.getLocale()
+            info["second"] = dialog_run(doc, chinese=not first_chinese)
             App.closeDocument(doc.Name)
         finally:
             Gui.setLocale(previous)
@@ -345,6 +350,7 @@ def run_macro():
         QtTest.QTest.mouseClick(compute, QtCore.Qt.MouseButton.LeftButton)
         done_at = time.monotonic()
         require(dialog.report is not None and dialog.report["cancelled"], "dialog cancel did not stop the check")
+        require(dialog.report["instances"] == full["instances"], ("dialog scope differs", dialog.report["instances"]))
         info["dialog_cancel"] = {"response_ms": round((done_at - clicked["t"]) * 1000, 1),
                                  "pairs_done": dialog.report["pairs_checked"],
                                  "status": widget.findChild(QtWidgets.QLabel, "SvenInterferenceStatus").text()}

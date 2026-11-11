@@ -25,6 +25,12 @@ SKIP_TYPES = ("App::Origin", "App::OriginFeature", "App::Line", "App::Plane", "A
 LEAF_TYPES = ("PartDesign::Body", "Part::Feature")
 
 
+# Triangulation used to find the faces of two parts that come near each other; exact distances
+# and volumes are then computed on those faces only.
+MAX_DEFLECTION = 0.05
+RELATIVE_DEFLECTION = 0.001
+
+
 class InterferenceError(ValueError):
     """A check that cannot start, such as an empty scope."""
 
@@ -32,7 +38,7 @@ class InterferenceError(ValueError):
 class Instance:
     """One solid where it sits in the document, reached from a root through a sub-element path."""
 
-    __slots__ = ("root", "sub", "obj", "label", "shape", "box", "closed", "volume", "source")
+    __slots__ = ("root", "sub", "obj", "label", "shape", "box", "closed", "volume", "source", "deflection")
 
     def __init__(self, root, sub, obj, label, shape):
         self.root = root
@@ -46,6 +52,14 @@ class Instance:
         self.volume = sum(s.Volume for s in solids) if self.closed else 0.0
         linked = obj.getLinkedObject(True)
         self.source = linked.Name if linked is not None else obj.Name
+        self.deflection = None
+
+    def mesh(self):
+        """Make sure the faces carry a triangulation no coarser than self.deflection."""
+        if self.deflection is None:
+            self.deflection = min(MAX_DEFLECTION, max(self.box.DiagonalLength * RELATIVE_DEFLECTION, 1e-3))
+            self.shape.tessellate(self.deflection)
+        return self.deflection
 
     @property
     def key(self):
@@ -188,14 +202,51 @@ def _match(rule, inst):
         or (inst.sub and rule in inst.sub.split("."))
 
 
+def _near_faces(a, b, reach):
+    """Faces of a and b whose triangles come within reach of each other, or None if proximity fails."""
+    try:
+        first, second = a.shape.proximity(b.shape, reach)
+    except Exception:
+        return None
+    return list(first), list(second)
+
+
+def _distance(a, b, reach):
+    """Exact minimum distance, measured only between faces the triangulations put within reach.
+
+    Returns (distance, points) or (None, None) when no face of one comes within reach of the other."""
+    near = None
+    if a.shape.Faces and b.shape.Faces:
+        a.mesh()
+        b.mesh()
+        near = _near_faces(a, b, reach + a.deflection + b.deflection)
+    if near is None:
+        distance, points, _ = a.shape.distToShape(b.shape)
+        return distance, points
+    first, second = near
+    if not first or not second:
+        return None, None
+    faces_a = Part.Compound([a.shape.Faces[i - 1] for i in first])
+    faces_b = Part.Compound([b.shape.Faces[i - 1] for i in second])
+    distance, points, _ = faces_a.distToShape(faces_b)
+    return distance, points
+
+
 def measure(a, b, clearance_limit, contact_tolerance):
     """Classify one pair. Returns a result dict, or None when the pair is clear of the limit."""
     result = {"a": a.describe(), "b": b.describe()}
+    reach = (clearance_limit or 0.0) + contact_tolerance
     try:
-        distance, points, _ = a.shape.distToShape(b.shape)
+        distance, points = _distance(a, b, reach)
     except Exception as error:
         result.update(kind=UNDETERMINED, reason=f"distance failed: {error}")
         return result
+    if distance is None:
+        # No face comes near: clear, unless one part sits wholly inside the other.
+        if _inside(a, b, contact_tolerance) or _inside(b, a, contact_tolerance):
+            distance, points = 0.0, [(a.box.Center, a.box.Center)]
+        else:
+            return None
     if distance > contact_tolerance:
         if _inside(a, b, contact_tolerance) or _inside(b, a, contact_tolerance):
             distance = 0.0

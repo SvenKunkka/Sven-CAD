@@ -14996,12 +14996,12 @@ treated as shortcut key sequence 'F, F'.</source>
     <message>
       <location filename="../CommandFeat.cpp" line="240"/>
       <source>Toggle Suppressed</source>
-      <translation>切换隐藏状态</translation>
+      <translation>切换抑制状态</translation>
     </message>
     <message>
       <location filename="../CommandFeat.cpp" line="242"/>
       <source>Toggles suppressed state of the selected objects. A suppressed object behaves like it was deleted.</source>
-      <translation>切换所选对象的隐藏状态。隐藏对象的行为与被删除时相同。</translation>
+      <translation>切换所选对象的抑制状态。被抑制的对象表现得如同已删除。</translation>
     </message>
   </context>
   <context>

@@ -454,7 +454,8 @@ void DesignToolbar::rebuildGroups(int tab)
                {"PersonalCAD_InsertFastener", {"Fastener", "紧固件"}, "Link"}},
               {"Assembly_CreateAssembly", "Assembly_InsertLink", "Assembly_InsertNewPart",
                "Assembly_CreateJointRigidGroup", "Assembly_ToggleGrounded",
-               "PersonalCAD_ReplaceFastener", "PersonalCAD_FastenerSummary"});
+               "PersonalCAD_ReplaceFastener", "PersonalCAD_FastenerSummary",
+               "PersonalCAD_ReplaceComponent", "PersonalCAD_NamedStates"});
     }
     else if (tab == Surface) {
         group(*row, {"Create", "创建"},
@@ -473,7 +474,8 @@ void DesignToolbar::rebuildGroups(int tab)
     else if (tab == Assembly) {
         group(*row, {"Insert", "插入"},
               {{"Assembly_InsertLink", {"Insert Component", "插入零件"}},
-               {"PersonalCAD_InsertFastener", {"Fastener", "紧固件"}, "Link"}},
+               {"PersonalCAD_InsertFastener", {"Fastener", "紧固件"}, "Link"},
+               {"PersonalCAD_ReplaceComponent", {"Replace", "替换"}}},
               {"Std_Import", "PersonalCAD_ReplaceFastener", "PersonalCAD_FastenerSummary"});
         group(*row, {"Create", "创建"},
               {{"Assembly_CreateAssembly", {"New Assembly", "新建装配"}},
@@ -487,7 +489,10 @@ void DesignToolbar::rebuildGroups(int tab)
                "Assembly_CreateJointBall", "Assembly_CreateJointDistance",
                "Assembly_CreateJointParallel", "Assembly_CreateJointPerpendicular",
                "Assembly_CreateJointAngle"});
-        group(*row, {"Modify", "修改"}, {{"Std_Transform", {"Move", "移动"}, "Std_TransformManip"}}, {"Std_Alignment"});
+        group(*row, {"Modify", "修改"},
+              {{"Std_Transform", {"Move", "移动"}, "Std_TransformManip"},
+               {"PersonalCAD_NamedStates", {"States", "状态"}}},
+              {"Std_Alignment"});
     }
     else {
         group(*row, {"Create", "创建"},

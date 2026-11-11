@@ -325,3 +325,10 @@ except ImportError:
     pass
 else:
     SvenInterferenceGui.register()
+
+try:
+    import SvenReplaceGui
+except ImportError:
+    pass
+else:
+    SvenReplaceGui.register()

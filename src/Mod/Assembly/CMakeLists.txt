@@ -39,7 +39,7 @@ set(Assembly_Scripts
 )
 
 if(FREECAD_PERSONAL_CAD)
-    list(APPEND Assembly_Scripts StaticBom.py SvenFasteners.py SvenFastenersCatalog.json SvenInterference.py)
+    list(APPEND Assembly_Scripts StaticBom.py SvenFasteners.py SvenFastenersCatalog.json SvenInterference.py SvenReplace.py)
 else()
     list(APPEND Assembly_Scripts CommandCreateSimulation.py)
 endif()
@@ -47,7 +47,7 @@ endif()
 if(BUILD_GUI)
     list (APPEND Assembly_Scripts InitGui.py)
     if(FREECAD_PERSONAL_CAD)
-        list(APPEND Assembly_Scripts SvenFastenersGui.py SvenInterferenceGui.py)
+        list(APPEND Assembly_Scripts SvenFastenersGui.py SvenInterferenceGui.py SvenReplaceGui.py)
     endif()
 endif(BUILD_GUI)
 
